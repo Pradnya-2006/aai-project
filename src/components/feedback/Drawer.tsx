@@ -1,6 +1,8 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { X } from "lucide-react";
 import { toast } from "sonner";
+import { api } from "../../api/client";
 import type {
   DrawerKind,
   InfluencerMetric,
@@ -8,6 +10,68 @@ import type {
   TopicMetric,
 } from "../../models/types";
 import { MetricLine } from "../ui/MetricLine";
+
+function DrawerActions({ mention }: { mention: Mention }) {
+  const queryClient = useQueryClient();
+
+  const generateMutation = useMutation({
+    mutationFn: () => api.drawerGenerateResponse(mention.id, mention.topic),
+    onSuccess: (data) => {
+      toast.success(data.message || "Draft response generated");
+      queryClient.invalidateQueries({ queryKey: ["audit-log"] });
+      queryClient.invalidateQueries({ queryKey: ["responses"] });
+    },
+    onError: () => toast.error("Failed to generate response"),
+  });
+
+  const incidentMutation = useMutation({
+    mutationFn: () => api.drawerOpenIncident(mention.id, mention.topic),
+    onSuccess: (data) => {
+      toast.error(data.message || "Incident opened");
+      queryClient.invalidateQueries({ queryKey: ["audit-log"] });
+      queryClient.invalidateQueries({ queryKey: ["risk"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+    onError: () => toast.error("Failed to open incident"),
+  });
+
+  const notifyMutation = useMutation({
+    mutationFn: () => api.drawerNotifyProductTeam(mention.id, "Product Team"),
+    onSuccess: (data) => {
+      toast.info(data.message || "Product team notified");
+      queryClient.invalidateQueries({ queryKey: ["audit-log"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+    onError: () => toast.error("Failed to notify product team"),
+  });
+
+  return (
+    <div className="button-row" style={{ marginTop: "14px" }}>
+      <button
+        className="secondary"
+        disabled={generateMutation.isPending}
+        onClick={() => generateMutation.mutate()}
+      >
+        {generateMutation.isPending ? "Generating..." : "Generate Response"}
+      </button>
+      <button
+        className="destructive"
+        disabled={incidentMutation.isPending}
+        onClick={() => incidentMutation.mutate()}
+      >
+        {incidentMutation.isPending ? "Escalating..." : "Open Incident"}
+      </button>
+      <button
+        className="secondary"
+        disabled={notifyMutation.isPending}
+        onClick={() => notifyMutation.mutate()}
+      >
+        {notifyMutation.isPending ? "Notifying..." : "Notify Product Team"}
+      </button>
+    </div>
+  );
+}
+
 
 export type DrawerProps = {
   kind: DrawerKind;
@@ -66,26 +130,7 @@ export function Drawer({
               Escalate to the response team and prepare a governed reply.
             </strong>
           </div>
-          <div className="button-row">
-            <button
-              className="secondary"
-              onClick={() => toast.info("Draft response generated")}
-            >
-              Generate
-            </button>
-            <button
-              className="primary"
-              onClick={() => toast.success("Signal response approved")}
-            >
-              Approve
-            </button>
-            <button
-              className="destructive"
-              onClick={() => toast.error("Incident opened")}
-            >
-              Open incident
-            </button>
-          </div>
+          <DrawerActions mention={mention} />
         </>
       )}
 

@@ -133,3 +133,49 @@ export type ChartPoint = {
 };
 
 export type DrawerKind = "mention" | "agent" | "topic" | "influencer" | null;
+
+export type ResponseStatus =
+  | "DRAFT"
+  | "PENDING_REVIEW"
+  | "APPROVED"
+  | "REJECTED"
+  | "PUBLISHED";
+
+export type ResponseDraft = {
+  id: number;
+  topic: string;
+  body: string;
+  status: ResponseStatus;
+  updated_at: string;
+  versions_count?: number;
+};
+
+export type ResponseVersion = {
+  id: number;
+  response_id: number;
+  body: string;
+  status: string;
+  created_at: string;
+};
+
+export type AuditLogEntry = {
+  id: number;
+  action: string;
+  before_status?: string | null;
+  after_status?: string | null;
+  actor: string;
+  details?: string | null;
+  target_id?: number | null;
+  created_at: string;
+};
+
+export type NotificationItem = {
+  id: number;
+  kind: string;
+  title: string;
+  body: string;
+  route: string;
+  read: boolean;
+  created_at: string;
+};
+

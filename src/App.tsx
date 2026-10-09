@@ -13,6 +13,7 @@ import { LoadingSkeleton } from "./components/feedback/LoadingSkeleton";
 import { Modal } from "./components/feedback/Modal";
 import { FilterBar } from "./components/ui/FilterBar";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { useNotifications } from "./hooks/useNotifications";
 import { useSimulator } from "./hooks/useSimulator";
 import { useTheme } from "./hooks/useTheme";
 import { useWorkspaceData } from "./hooks/useWorkspaceData";
@@ -132,6 +133,13 @@ export function AppContent() {
     setDrawer(null);
   };
 
+  const {
+    notifications,
+    unreadCount,
+    markAllRead,
+    handleNotificationClick,
+  } = useNotifications(navigate);
+
   const openMention = (m: Mention) => {
     setSelectedMention(m);
     setDrawer("mention");
@@ -192,6 +200,10 @@ export function AppContent() {
           presentation={presentation}
           onTogglePresentation={() => setPresentation((v) => !v)}
           demo={demo}
+          notifications={notifications}
+          unreadCount={unreadCount}
+          onMarkAllNotificationsRead={markAllRead}
+          onNotificationClick={handleNotificationClick}
         />
 
         <FilterBar
@@ -224,38 +236,20 @@ export function AppContent() {
           {active === "Live Mentions" && (
             <LiveMentionsPage mentions={filtered} onMention={openMention} />
           )}
-
-          {active === "Topics & Trends" && (
-            <TopicsTrendsPage topics={topics} />
-          )}
-
-          {active === "Risk Center" && (
-            <RiskCenterPage risk={risk} chart={chart} />
-          )}
-
-          {active === "Competitors" && (
-            <CompetitorsPage competitors={competitors} />
-          )}
-
-          {active === "Influencers" && (
-            <InfluencersPage influencers={influencers} />
-          )}
-
-          {active === "Campaigns" && (
-            <CampaignsPage campaigns={campaigns} />
-          )}
-
+          {active === "Topics & Trends" && <TopicsTrendsPage topics={topics} />}
+          {active === "Risk Center" && <RiskCenterPage risk={risk} chart={chart} />}
+          {active === "Competitors" && <CompetitorsPage competitors={competitors} />}
+          {active === "Influencers" && <InfluencersPage influencers={influencers} />}
+          {active === "Campaigns" && <CampaignsPage campaigns={campaigns} />}
           {active === "Response Studio" && (
             <ResponseStudioPage onNavigate={navigate} />
           )}
-
           {active === "Crisis Ops" && (
             <CrisisOpsPage
               state={simulator}
               onState={(s: SimulatorState) => setSimulator(s)}
             />
           )}
-
           {active === "Executive Intelligence" && (
             <ExecutiveIntelligencePage
               summary={summary}

@@ -132,3 +132,98 @@ def test_crisis_simulator_stage_mapping_and_reset() -> None:
     restored = client.post("/api/crisis/reset")
     assert restored.json()["status"] == "idle"
     assert restored.json()["inserted"] == 0
+
+
+def test_response_reject_with_reason_and_audit() -> None:
+    res = client.post("/api/responses/1/reject", json={"reason": "Tone is overly defensive"})
+    assert res.status_code == 200
+    assert res.json()["status"] == "REJECTED"
+
+    # Verify audit entry recorded
+    audit = client.get("/api/responses/1/audit").json()
+    assert any(a["action"] == "response_reject" and "Tone is overly defensive" in (a["details"] or "") for a in audit)
+
+
+def test_response_regenerate_variant_and_audit() -> None:
+    current = client.get("/api/responses/1").json()["body"]
+    res = client.post("/api/responses/1/regenerate")
+    assert res.status_code == 200
+    new_draft = res.json()
+    assert new_draft["status"] == "PENDING_REVIEW"
+    assert new_draft["body"] != current
+
+    # Verify audit entry
+    audit = client.get("/api/responses/1/audit").json()
+    assert any(a["action"] == "response_regenerate" for a in audit)
+
+
+def test_response_edit_creates_version_and_audit() -> None:
+    new_text = "Updated response draft reviewed by communication leads."
+    res = client.post("/api/responses/1/edit", json={"body": new_text})
+    assert res.status_code == 200
+    assert res.json()["body"] == new_text
+
+    versions = client.get("/api/responses/1/versions").json()
+    assert len(versions) >= 2
+    assert any(v["body"] == new_text for v in versions)
+
+    audit = client.get("/api/responses/1/audit").json()
+    assert any(a["action"] == "response_edit" for a in audit)
+
+
+def test_response_bulk_approve_and_audit() -> None:
+    # Set draft 1 and draft 2 to PENDING_REVIEW
+    with get_connection() as connection:
+        connection.execute("UPDATE response_drafts SET status = 'PENDING_REVIEW' WHERE id IN (1, 2)")
+        connection.commit()
+
+    res = client.post("/api/responses/bulk-approve", json={"ids": [1, 2]})
+    assert res.status_code == 200
+    assert res.json()["approved"] is True
+    assert res.json()["count"] == 2
+
+    draft1 = client.get("/api/responses/1").json()
+    draft2 = client.get("/api/responses/2").json()
+    assert draft1["status"] == "APPROVED"
+    assert draft2["status"] == "APPROVED"
+
+    global_audit = client.get("/api/audit-log").json()
+    bulk_audits = [a for a in global_audit if a["action"] == "response_approve" and a.get("details") == "Bulk approved"]
+    assert len(bulk_audits) >= 2
+
+
+def test_notifications_list_and_mark_read() -> None:
+    notifs = client.get("/api/notifications").json()
+    assert len(notifs) >= 1
+    assert all("route" in n and "read" in n for n in notifs)
+
+    first_id = notifs[0]["id"]
+    mark_single = client.post(f"/api/notifications/{first_id}/read")
+    assert mark_single.status_code == 200
+
+    mark_all = client.post("/api/notifications/read")
+    assert mark_all.status_code == 200
+
+    updated = client.get("/api/notifications").json()
+    assert all(n["read"] is True for n in updated)
+
+
+def test_drawer_actions_endpoints_and_audit() -> None:
+    gen = client.post("/api/drawer/generate-response", json={"mention_id": 42, "topic": "App Update Failure"})
+    assert gen.status_code == 200
+    assert gen.json()["success"] is True
+
+    inc = client.post("/api/drawer/open-incident", json={"mention_id": 42, "topic": "App Update Failure"})
+    assert inc.status_code == 200
+    assert inc.json()["incident_open"] is True
+
+    notif = client.post("/api/drawer/notify-product-team", json={"mention_id": 42, "team": "Mobile Core"})
+    assert notif.status_code == 200
+    assert notif.json()["success"] is True
+
+    audit = client.get("/api/audit-log").json()
+    actions = {a["action"] for a in audit}
+    assert "drawer_generate_response" in actions
+    assert "drawer_open_incident" in actions
+    assert "drawer_notify_product_team" in actions
+

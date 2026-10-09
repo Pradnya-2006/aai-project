@@ -4,3 +4,4 @@ export * from "./CardHead";
 export * from "./MentionCard";
 export * from "./MetricCard";
 export * from "./TopicCard";
+export * from "./GlobalAuditView";

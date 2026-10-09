@@ -52,15 +52,64 @@ class Summary(BaseModel):
 
 
 class Approval(BaseModel):
-    approved: bool
-    status: Literal["approved"]
+    approved: bool = True
+    status: Literal["approved"] = "approved"
 
 
 class ResponseDraft(BaseModel):
     id: int
+    topic: str = "General"
     body: str
     status: ResponseStatus
     updated_at: str
+    versions_count: int = 1
+
+
+class RejectRequest(BaseModel):
+    reason: str = "Draft rejected by reviewer"
+
+
+class EditResponseRequest(BaseModel):
+    body: str
+
+
+class BulkApproveRequest(BaseModel):
+    ids: list[int] | None = None
+
+
+class DrawerGenerateResponseRequest(BaseModel):
+    mention_id: int | None = None
+    topic: str | None = None
+
+
+class DrawerOpenIncidentRequest(BaseModel):
+    mention_id: int | None = None
+    topic: str | None = None
+
+
+class DrawerNotifyProductRequest(BaseModel):
+    mention_id: int | None = None
+    team: str = "Product Team"
+    note: str | None = None
+
+
+class AuditLogEntry(BaseModel):
+    id: int
+    action: str
+    before_status: str | None = None
+    after_status: str | None = None
+    actor: str
+    details: str | None = None
+    target_id: int | None = None
+    created_at: str
+
+
+class ResponseVersion(BaseModel):
+    id: int
+    response_id: int
+    body: str
+    status: str
+    created_at: str
 
 
 class Agent(BaseModel):
@@ -76,8 +125,10 @@ class Notification(BaseModel):
     kind: str
     title: str
     body: str
+    route: str = "Command Center"
     read: bool
     created_at: str
+
 
 
 class SearchResult(BaseModel):
@@ -190,6 +241,25 @@ def get_connection() -> sqlite3.Connection:
     return connection
 
 
+VARIANT_POOLS: dict[int, list[str]] = {
+    1: [
+        "We’re sorry you’re running into this. Our team has identified the login issue and is working on a fix. We’ll share an update shortly.",
+        "We understand your frustration with authentication issues. Our engineering team has isolated the cause and a hotfix is deploying now.",
+        "Thanks for reporting this login latency. We're actively rolling out a resolution and expect complete stability within 20 minutes.",
+        "Our identity services team has deployed a patch to resolve session expiration issues. Please refresh and try again.",
+    ],
+    2: [
+        "We are actively investigating the update crashes on mobile. A patch is undergoing testing and will roll out within the hour.",
+        "Our team has pinpointed the regression in the latest build. A rollback is underway to restore application stability immediately.",
+        "We hear your feedback regarding the update. An emergency patch is currently in QA to eliminate all startup crash scenarios.",
+    ],
+    3: [
+        "Thank you for highlighting the checkout latency. Our infrastructure engineers have deployed a hotfix to stabilize response times.",
+        "We are closely monitoring payment gateway throughput. All traffic has been rerouted to secondary clusters to ensure zero checkout delays.",
+    ],
+}
+
+
 def initialize_database() -> None:
     DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
     with closing(get_connection()) as connection:
@@ -206,8 +276,11 @@ def initialize_database() -> None:
                 impact REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS response_drafts (
-                id INTEGER PRIMARY KEY CHECK (id = 1), body TEXT NOT NULL,
-                status TEXT NOT NULL, updated_at TEXT NOT NULL
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                topic TEXT NOT NULL DEFAULT 'Login Issues',
+                body TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (status IN ('DRAFT', 'PENDING_REVIEW', 'APPROVED', 'REJECTED', 'PUBLISHED')),
+                updated_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS response_versions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, response_id INTEGER NOT NULL,
@@ -216,6 +289,7 @@ def initialize_database() -> None:
             CREATE TABLE IF NOT EXISTS audit_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL,
                 before_status TEXT, after_status TEXT, actor TEXT NOT NULL,
+                details TEXT DEFAULT '', target_id INTEGER,
                 created_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS agents (
@@ -234,39 +308,45 @@ def initialize_database() -> None:
             );
             CREATE TABLE IF NOT EXISTS notifications (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL,
-                title TEXT NOT NULL, body TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL
+                title TEXT NOT NULL, body TEXT NOT NULL, route TEXT DEFAULT 'Command Center',
+                read INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL
             );
             """
         )
-        legacy_response_schema = connection.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'response_drafts'").fetchone()
-        if legacy_response_schema and "CHECK (status IN ('pending', 'approved'))" in legacy_response_schema[0]:
-            legacy_rows = connection.execute("SELECT id, body, status, updated_at FROM response_drafts ORDER BY id").fetchall()
-            connection.execute("ALTER TABLE response_drafts RENAME TO response_drafts_legacy")
+        existing_draft_schema = connection.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'response_drafts'").fetchone()
+        if existing_draft_schema and "CHECK (id = 1)" in existing_draft_schema[0]:
+            rows = connection.execute("SELECT id, body, status, updated_at FROM response_drafts").fetchall()
+            connection.execute("ALTER TABLE response_drafts RENAME TO response_drafts_old")
             connection.execute(
                 """CREATE TABLE response_drafts (
-                    id INTEGER PRIMARY KEY CHECK (id = 1), body TEXT NOT NULL,
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    topic TEXT NOT NULL DEFAULT 'Login Issues',
+                    body TEXT NOT NULL,
                     status TEXT NOT NULL CHECK (status IN ('DRAFT', 'PENDING_REVIEW', 'APPROVED', 'REJECTED', 'PUBLISHED')),
                     updated_at TEXT NOT NULL
                 )"""
             )
-            if legacy_rows:
-                for row in legacy_rows:
-                    status = row["status"]
-                    normalized = status.upper()
-                    if normalized == "PENDING":
-                        normalized = "PENDING_REVIEW"
-                    elif normalized == "APPROVED":
-                        normalized = "APPROVED"
-                    elif normalized == "APPROVE":
-                        normalized = "APPROVED"
-                    elif normalized not in {"DRAFT", "PENDING_REVIEW", "APPROVED", "REJECTED", "PUBLISHED"}:
-                        normalized = "PENDING_REVIEW"
-                    connection.execute(
-                        "INSERT INTO response_drafts (id, body, status, updated_at) VALUES (?, ?, ?, ?)",
-                        (row["id"], row["body"], normalized, row["updated_at"] or datetime.now(UTC).isoformat()),
-                    )
-            connection.execute("DROP TABLE response_drafts_legacy")
+            for r in rows:
+                connection.execute(
+                    "INSERT INTO response_drafts (id, topic, body, status, updated_at) VALUES (?, 'Login Issues', ?, ?, ?)",
+                    (r["id"], r["body"], r["status"], r["updated_at"] or datetime.now(UTC).isoformat()),
+                )
+            connection.execute("DROP TABLE response_drafts_old")
+
+        existing_draft_cols = {row["name"] for row in connection.execute("PRAGMA table_info(response_drafts)").fetchall()}
+        if "topic" not in existing_draft_cols:
+            connection.execute("ALTER TABLE response_drafts ADD COLUMN topic TEXT NOT NULL DEFAULT 'Login Issues'")
+
+        existing_audit_cols = {row["name"] for row in connection.execute("PRAGMA table_info(audit_log)").fetchall()}
+        if "details" not in existing_audit_cols:
+            connection.execute("ALTER TABLE audit_log ADD COLUMN details TEXT DEFAULT ''")
+        if "target_id" not in existing_audit_cols:
+            connection.execute("ALTER TABLE audit_log ADD COLUMN target_id INTEGER")
+
+        existing_notif_cols = {row["name"] for row in connection.execute("PRAGMA table_info(notifications)").fetchall()}
+        if "route" not in existing_notif_cols:
+            connection.execute("ALTER TABLE notifications ADD COLUMN route TEXT DEFAULT 'Command Center'")
+
         existing_columns = {row["name"] for row in connection.execute("PRAGMA table_info(mentions)").fetchall()}
         for name, definition in (
             ("topic", "TEXT NOT NULL DEFAULT 'App Update Failure'"),
@@ -284,21 +364,23 @@ def initialize_database() -> None:
         agent_columns = {row["name"] for row in connection.execute("PRAGMA table_info(agents)").fetchall()}
         if "accuracy" not in agent_columns:
             connection.execute("ALTER TABLE agents ADD COLUMN accuracy REAL")
-        response_columns = {row["name"] for row in connection.execute("PRAGMA table_info(response_drafts)").fetchall()}
-        if "updated_at" not in response_columns:
-            connection.execute("ALTER TABLE response_drafts ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''")
-        connection.execute("UPDATE response_drafts SET status = 'PENDING_REVIEW' WHERE status = 'pending'")
-        connection.execute("UPDATE response_drafts SET status = 'APPROVED' WHERE status = 'approved'")
-        count = connection.execute("SELECT COUNT(*) FROM mentions").fetchone()[0]
-        topic_count = connection.execute("SELECT COUNT(DISTINCT topic) FROM mentions").fetchone()[0]
-        if count < 25000 or topic_count < 7:
-            connection.execute("DELETE FROM mentions")
-            seed_mentions(connection)
+
         now = datetime.now(UTC).isoformat()
-        connection.execute(
-            "INSERT OR IGNORE INTO response_drafts (id, body, status, updated_at) VALUES (1, ?, 'PENDING_REVIEW', ?)",
-            ("We’re sorry you’re running into this. Our team has identified the login issue and is working on a fix. We’ll share an update shortly.", now),
-        )
+        drafts_to_seed = [
+            (1, "Login Issues", "We’re sorry you’re running into this. Our team has identified the login issue and is working on a fix. We’ll share an update shortly.", "PENDING_REVIEW"),
+            (2, "App Update Failure", "We are actively investigating the update crashes on mobile. A patch is undergoing testing and will roll out within the hour.", "PENDING_REVIEW"),
+            (3, "Performance", "Thank you for highlighting the checkout latency. Our infrastructure engineers have deployed a hotfix to stabilize response times.", "PENDING_REVIEW"),
+        ]
+        for did, dtopic, dbody, dstatus in drafts_to_seed:
+            connection.execute(
+                "INSERT OR IGNORE INTO response_drafts (id, topic, body, status, updated_at) VALUES (?, ?, ?, ?, ?)",
+                (did, dtopic, dbody, dstatus, now),
+            )
+            connection.execute(
+                "INSERT OR IGNORE INTO response_versions (id, response_id, body, status, created_at) VALUES (?, ?, ?, ?, ?)",
+                (did, did, dbody, dstatus, now),
+            )
+
         agent_names = [
             "Social Listening", "Mention Classification", "Sentiment & Emotion",
             "Influence Detection", "Trend Discovery", "Brand Risk",
@@ -312,11 +394,31 @@ def initialize_database() -> None:
         connection.execute("UPDATE agents SET accuracy = CASE WHEN name IN ('Mention Classification', 'Sentiment & Emotion') THEN 0.94 ELSE COALESCE(accuracy, 0.91) END")
         connection.execute("INSERT OR IGNORE INTO simulator_state (id) VALUES (1)")
         connection.execute("INSERT OR IGNORE INTO risk_state (id) VALUES (1)")
-        connection.execute(
-            "INSERT OR IGNORE INTO notifications (kind, title, body, created_at) VALUES ('CRITICAL', 'Critical risk detected', 'App Update Failure has crossed the critical threshold.', ?)",
-            (now,),
-        )
+
+        notif_count = connection.execute("SELECT COUNT(*) FROM notifications").fetchone()[0]
+        if notif_count == 0:
+            initial_notifs = [
+                ("CRITICAL", "Critical risk detected", "App Update Failure has crossed the critical threshold.", "Risk Center"),
+                ("TREND", "Viral Spike Detected", "Spike in mobile app update complaints on Reddit and X.", "Topics & Trends"),
+                ("RESPONSE", "Response awaiting review", "Draft #1 ready for executive approval.", "Response Studio"),
+                ("SYSTEM", "Simulator ready", "Crisis escalation scenario configured.", "Crisis Ops"),
+            ]
+            for kind, title, body, route in initial_notifs:
+                connection.execute(
+                    "INSERT INTO notifications (kind, title, body, route, read, created_at) VALUES (?, ?, ?, ?, 0, ?)",
+                    (kind, title, body, route, now),
+                )
+
+        count = connection.execute("SELECT COUNT(*) FROM mentions").fetchone()[0]
+        topic_count = connection.execute("SELECT COUNT(DISTINCT topic) FROM mentions").fetchone()[0]
+        cutoff = (datetime.now(UTC) - timedelta(hours=23)).isoformat()
+        recent_count = connection.execute("SELECT COUNT(*) FROM mentions WHERE created_at >= ?", (cutoff,)).fetchone()[0] if count > 0 else 0
+        if count < 25000 or topic_count < 7 or recent_count < 24000:
+            connection.execute("DELETE FROM mentions")
+            seed_mentions(connection)
+
         connection.commit()
+
 
 
 def seed_mentions(connection: sqlite3.Connection) -> None:
@@ -634,38 +736,262 @@ def mention_stream() -> StreamingResponse:
     return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
-@app.get("/api/responses/1", response_model=ResponseDraft)
-def get_response() -> ResponseDraft:
+@app.get("/api/responses", response_model=list[ResponseDraft])
+def list_responses() -> list[ResponseDraft]:
     with closing(get_connection()) as connection:
-        row = connection.execute("SELECT * FROM response_drafts WHERE id = 1").fetchone()
-    return ResponseDraft(id=row["id"], body=row["body"], status=row["status"], updated_at=row["updated_at"])
+        rows = connection.execute("SELECT * FROM response_drafts ORDER BY id ASC").fetchall()
+        result = []
+        for row in rows:
+            v_count = connection.execute("SELECT COUNT(*) FROM response_versions WHERE response_id = ?", (row["id"],)).fetchone()[0]
+            result.append(ResponseDraft(
+                id=row["id"],
+                topic=row["topic"] if "topic" in row.keys() else "General",
+                body=row["body"],
+                status=row["status"],
+                updated_at=row["updated_at"],
+                versions_count=max(1, v_count),
+            ))
+        return result
 
 
-@app.post("/api/responses/1/approve", response_model=Approval)
-def approve_response() -> Approval:
-    return _transition_response("APPROVED")
-
-
-@app.post("/api/responses/1/publish", response_model=ResponseDraft)
-def publish_response() -> ResponseDraft:
+@app.get("/api/responses/{id}", response_model=ResponseDraft)
+def get_response(id: int = 1) -> ResponseDraft:
     with closing(get_connection()) as connection:
-        row = connection.execute("SELECT * FROM response_drafts WHERE id = 1").fetchone()
-        if row["status"] != "APPROVED":
-            raise HTTPException(status_code=409, detail="Response must be APPROVED before publishing.")
-    _transition_response("PUBLISHED")
-    return get_response()
+        row = connection.execute("SELECT * FROM response_drafts WHERE id = ?", (id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Response draft not found.")
+        v_count = connection.execute("SELECT COUNT(*) FROM response_versions WHERE response_id = ?", (id,)).fetchone()[0]
+        return ResponseDraft(
+            id=row["id"],
+            topic=row["topic"] if "topic" in row.keys() else "General",
+            body=row["body"],
+            status=row["status"],
+            updated_at=row["updated_at"],
+            versions_count=max(1, v_count),
+        )
 
 
-def _transition_response(status: ResponseStatus) -> Approval:
+@app.post("/api/responses/{id}/approve", response_model=Approval)
+def approve_response(id: int = 1) -> Approval:
     now = datetime.now(UTC).isoformat()
     with closing(get_connection()) as connection:
-        row = connection.execute("SELECT status FROM response_drafts WHERE id = 1").fetchone()
+        row = connection.execute("SELECT status, body FROM response_drafts WHERE id = ?", (id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Response draft not found.")
         before = row["status"]
-        connection.execute("UPDATE response_drafts SET status = ?, updated_at = ? WHERE id = 1", (status, now))
-        connection.execute("INSERT INTO response_versions (response_id, body, status, created_at) SELECT 1, body, ?, ? FROM response_drafts WHERE id = 1", (status, now))
-        connection.execute("INSERT INTO audit_log (action, before_status, after_status, actor, created_at) VALUES (?, ?, ?, 'Alex Rivera', ?)", ("response_transition", before, status, now))
+        connection.execute("UPDATE response_drafts SET status = 'APPROVED', updated_at = ? WHERE id = ?", (now, id))
+        connection.execute("INSERT INTO response_versions (response_id, body, status, created_at) VALUES (?, ?, 'APPROVED', ?)", (id, row["body"], now))
+        connection.execute(
+            "INSERT INTO audit_log (action, before_status, after_status, actor, details, target_id, created_at) VALUES ('response_approve', ?, 'APPROVED', 'Alex Rivera', 'Response approved for publishing', ?, ?)",
+            (before, id, now),
+        )
         connection.commit()
-    return Approval(approved=status == "APPROVED", status="approved")
+    return Approval(approved=True, status="approved")
+
+
+@app.post("/api/responses/{id}/reject", response_model=ResponseDraft)
+def reject_response(id: int, payload: RejectRequest = RejectRequest()) -> ResponseDraft:
+    now = datetime.now(UTC).isoformat()
+    with closing(get_connection()) as connection:
+        row = connection.execute("SELECT status, body FROM response_drafts WHERE id = ?", (id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Response draft not found.")
+        before = row["status"]
+        reason = payload.reason or "Draft rejected by reviewer"
+        connection.execute("UPDATE response_drafts SET status = 'REJECTED', updated_at = ? WHERE id = ?", (now, id))
+        connection.execute("INSERT INTO response_versions (response_id, body, status, created_at) VALUES (?, ?, 'REJECTED', ?)", (id, row["body"], now))
+        connection.execute(
+            "INSERT INTO audit_log (action, before_status, after_status, actor, details, target_id, created_at) VALUES ('response_reject', ?, 'REJECTED', 'Alex Rivera', ?, ?, ?)",
+            (before, f"Reason: {reason}", id, now),
+        )
+        connection.commit()
+    return get_response(id)
+
+
+@app.post("/api/responses/{id}/regenerate", response_model=ResponseDraft)
+def regenerate_response(id: int) -> ResponseDraft:
+    now = datetime.now(UTC).isoformat()
+    with closing(get_connection()) as connection:
+        row = connection.execute("SELECT status, body FROM response_drafts WHERE id = ?", (id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Response draft not found.")
+        before = row["status"]
+        pool = VARIANT_POOLS.get(id, [
+            "We understand your concerns and are actively resolving this with our product engineers.",
+            "Our team has identified the root cause and is pushing an expedited update shortly.",
+            "Thank you for your patience while we deploy an immediate fix to address this issue.",
+        ])
+        current_body = row["body"]
+        next_body = pool[0]
+        for v in pool:
+            if v != current_body:
+                next_body = v
+                break
+        connection.execute("UPDATE response_drafts SET body = ?, status = 'PENDING_REVIEW', updated_at = ? WHERE id = ?", (next_body, now, id))
+        connection.execute("INSERT INTO response_versions (response_id, body, status, created_at) VALUES (?, ?, 'PENDING_REVIEW', ?)", (id, next_body, now))
+        connection.execute(
+            "INSERT INTO audit_log (action, before_status, after_status, actor, details, target_id, created_at) VALUES ('response_regenerate', ?, 'PENDING_REVIEW', 'AI Agent (Response Generation)', 'Regenerated valid response variant', ?, ?)",
+            (before, id, now),
+        )
+        connection.commit()
+    return get_response(id)
+
+
+@app.post("/api/responses/{id}/edit", response_model=ResponseDraft)
+def edit_response(id: int, payload: EditResponseRequest) -> ResponseDraft:
+    if not payload.body.strip():
+        raise HTTPException(status_code=400, detail="Response body cannot be empty.")
+    now = datetime.now(UTC).isoformat()
+    with closing(get_connection()) as connection:
+        row = connection.execute("SELECT status, body FROM response_drafts WHERE id = ?", (id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Response draft not found.")
+        before = row["status"]
+        new_status = "PENDING_REVIEW" if row["status"] in ("REJECTED", "APPROVED", "PUBLISHED") else row["status"]
+        connection.execute("UPDATE response_drafts SET body = ?, status = ?, updated_at = ? WHERE id = ?", (payload.body, new_status, now, id))
+        connection.execute("INSERT INTO response_versions (response_id, body, status, created_at) VALUES (?, ?, ?, ?)", (id, payload.body, new_status, now))
+        connection.execute(
+            "INSERT INTO audit_log (action, before_status, after_status, actor, details, target_id, created_at) VALUES ('response_edit', ?, ?, 'Alex Rivera', ?, ?, ?)",
+            (before, new_status, f"Edited draft content ({len(payload.body)} chars)", id, now),
+        )
+        connection.commit()
+    return get_response(id)
+
+
+@app.post("/api/responses/{id}/publish", response_model=ResponseDraft)
+def publish_response(id: int = 1) -> ResponseDraft:
+    now = datetime.now(UTC).isoformat()
+    with closing(get_connection()) as connection:
+        row = connection.execute("SELECT status, body FROM response_drafts WHERE id = ?", (id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Response draft not found.")
+        if row["status"] != "APPROVED":
+            raise HTTPException(status_code=409, detail="Response must be APPROVED before publishing.")
+        before = row["status"]
+        connection.execute("UPDATE response_drafts SET status = 'PUBLISHED', updated_at = ? WHERE id = ?", (now, id))
+        connection.execute("INSERT INTO response_versions (response_id, body, status, created_at) VALUES (?, ?, 'PUBLISHED', ?)", (id, row["body"], now))
+        connection.execute(
+            "INSERT INTO audit_log (action, before_status, after_status, actor, details, target_id, created_at) VALUES ('response_publish', ?, 'PUBLISHED', 'Alex Rivera', 'Published response to channels', ?, ?)",
+            (before, id, now),
+        )
+        connection.commit()
+    return get_response(id)
+
+
+@app.post("/api/responses/bulk-approve")
+def bulk_approve(payload: BulkApproveRequest = BulkApproveRequest()) -> dict:
+    now = datetime.now(UTC).isoformat()
+    with closing(get_connection()) as connection:
+        if payload.ids:
+            target_ids = payload.ids
+        else:
+            rows = connection.execute("SELECT id FROM response_drafts WHERE status = 'PENDING_REVIEW'").fetchall()
+            target_ids = [r["id"] for r in rows]
+        approved_count = 0
+        for tid in target_ids:
+            row = connection.execute("SELECT status, body FROM response_drafts WHERE id = ?", (tid,)).fetchone()
+            if row:
+                before = row["status"]
+                connection.execute("UPDATE response_drafts SET status = 'APPROVED', updated_at = ? WHERE id = ?", (now, tid))
+                connection.execute("INSERT INTO response_versions (response_id, body, status, created_at) VALUES (?, ?, 'APPROVED', ?)", (tid, row["body"], now))
+                connection.execute(
+                    "INSERT INTO audit_log (action, before_status, after_status, actor, details, target_id, created_at) VALUES ('response_approve', ?, 'APPROVED', 'Alex Rivera', 'Bulk approved', ?, ?)",
+                    (before, tid, now),
+                )
+                approved_count += 1
+        connection.commit()
+    return {"approved": True, "count": approved_count, "ids": target_ids}
+
+
+@app.get("/api/responses/{id}/versions", response_model=list[ResponseVersion])
+def list_response_versions(id: int = 1) -> list[ResponseVersion]:
+    with closing(get_connection()) as connection:
+        rows = connection.execute("SELECT * FROM response_versions WHERE response_id = ? ORDER BY id DESC", (id,)).fetchall()
+        return [ResponseVersion(id=r["id"], response_id=r["response_id"], body=r["body"], status=r["status"], created_at=r["created_at"]) for r in rows]
+
+
+@app.get("/api/responses/{id}/audit", response_model=list[AuditLogEntry])
+def get_response_audit(id: int = 1) -> list[AuditLogEntry]:
+    with closing(get_connection()) as connection:
+        rows = connection.execute("SELECT * FROM audit_log WHERE target_id = ? OR (target_id IS NULL AND action LIKE 'response%') ORDER BY id DESC LIMIT 50", (id,)).fetchall()
+        return [AuditLogEntry(
+            id=r["id"],
+            action=r["action"],
+            before_status=r["before_status"],
+            after_status=r["after_status"],
+            actor=r["actor"],
+            details=r["details"] if "details" in r.keys() else None,
+            target_id=r["target_id"] if "target_id" in r.keys() else id,
+            created_at=r["created_at"],
+        ) for r in rows]
+
+
+@app.get("/api/audit-log", response_model=list[AuditLogEntry])
+def get_global_audit_log(limit: int = Query(60, ge=1, le=200)) -> list[AuditLogEntry]:
+    with closing(get_connection()) as connection:
+        rows = connection.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        return [AuditLogEntry(
+            id=r["id"],
+            action=r["action"],
+            before_status=r["before_status"],
+            after_status=r["after_status"],
+            actor=r["actor"],
+            details=r["details"] if "details" in r.keys() else None,
+            target_id=r["target_id"] if "target_id" in r.keys() else None,
+            created_at=r["created_at"],
+        ) for r in rows]
+
+
+@app.post("/api/drawer/generate-response")
+def drawer_generate_response(payload: DrawerGenerateResponseRequest = DrawerGenerateResponseRequest()) -> dict:
+    now = datetime.now(UTC).isoformat()
+    mention_id = payload.mention_id or 1
+    topic = payload.topic or "App Update Failure"
+    with closing(get_connection()) as connection:
+        details = f"Generated draft response for mention #{mention_id} ({topic})"
+        connection.execute(
+            "INSERT INTO audit_log (action, actor, details, target_id, created_at) VALUES ('drawer_generate_response', 'Alex Rivera', ?, ?, ?)",
+            (details, mention_id, now),
+        )
+        connection.commit()
+    return {"success": True, "message": "Draft response generated", "mention_id": mention_id, "topic": topic}
+
+
+@app.post("/api/drawer/open-incident")
+def drawer_open_incident(payload: DrawerOpenIncidentRequest = DrawerOpenIncidentRequest()) -> dict:
+    now = datetime.now(UTC).isoformat()
+    mention_id = payload.mention_id or 1
+    topic = payload.topic or "Critical Alert"
+    with closing(get_connection()) as connection:
+        connection.execute("UPDATE risk_state SET incident_open = 1 WHERE id = 1")
+        connection.execute(
+            "INSERT INTO notifications (kind, title, body, route, read, created_at) VALUES ('CRITICAL', 'Incident Opened via Drawer', ?, 'Crisis Ops', 0, ?)",
+            (f"Escalated from mention #{mention_id}: {topic}", now),
+        )
+        connection.execute(
+            "INSERT INTO audit_log (action, actor, details, target_id, created_at) VALUES ('drawer_open_incident', 'Alex Rivera', ?, ?, ?)",
+            (f"Opened incident from mention #{mention_id} ({topic})", mention_id, now),
+        )
+        connection.commit()
+    return {"success": True, "incident_open": True, "message": "Incident opened"}
+
+
+@app.post("/api/drawer/notify-product-team")
+def drawer_notify_product_team(payload: DrawerNotifyProductRequest = DrawerNotifyProductRequest()) -> dict:
+    now = datetime.now(UTC).isoformat()
+    mention_id = payload.mention_id or 1
+    team = payload.team or "Product Team"
+    with closing(get_connection()) as connection:
+        connection.execute(
+            "INSERT INTO notifications (kind, title, body, route, read, created_at) VALUES ('TEAM_ALERT', 'Product Team Escalation', ?, 'Live Mentions', 0, ?)",
+            (f"Mention #{mention_id} escalated to {team} for immediate triage.", now),
+        )
+        connection.execute(
+            "INSERT INTO audit_log (action, actor, details, target_id, created_at) VALUES ('drawer_notify_product_team', 'Alex Rivera', ?, ?, ?)",
+            (f"Notified {team} for mention #{mention_id}", mention_id, now),
+        )
+        connection.commit()
+    return {"success": True, "message": f"{team} notified"}
 
 
 @app.get("/api/agents", response_model=list[Agent])
@@ -687,16 +1013,42 @@ def run_agents() -> list[Agent]:
 @app.get("/api/notifications", response_model=list[Notification])
 def list_notifications() -> list[Notification]:
     with closing(get_connection()) as connection:
-        rows = connection.execute("SELECT * FROM notifications ORDER BY id DESC LIMIT 30").fetchall()
-    return [Notification(id=row["id"], kind=row["kind"], title=row["title"], body=row["body"], read=bool(row["read"]), created_at=row["created_at"]) for row in rows]
+        rows = connection.execute("SELECT * FROM notifications ORDER BY id DESC LIMIT 50").fetchall()
+    return [Notification(
+        id=row["id"],
+        kind=row["kind"],
+        title=row["title"],
+        body=row["body"],
+        route=row["route"] if "route" in row.keys() and row["route"] else "Command Center",
+        read=bool(row["read"]),
+        created_at=row["created_at"],
+    ) for row in rows]
 
 
 @app.post("/api/notifications/read")
 def mark_notifications_read() -> dict[str, bool]:
+    now = datetime.now(UTC).isoformat()
     with closing(get_connection()) as connection:
         connection.execute("UPDATE notifications SET read = 1")
+        connection.execute(
+            "INSERT INTO audit_log (action, actor, details, created_at) VALUES ('notifications_mark_all_read', 'Alex Rivera', 'Marked all notifications as read', ?)",
+            (now,),
+        )
         connection.commit()
     return {"success": True}
+
+
+@app.post("/api/notifications/{id}/read")
+def mark_single_notification_read(id: int) -> dict:
+    now = datetime.now(UTC).isoformat()
+    with closing(get_connection()) as connection:
+        connection.execute("UPDATE notifications SET read = 1 WHERE id = ?", (id,))
+        connection.execute(
+            "INSERT INTO audit_log (action, actor, details, target_id, created_at) VALUES ('notification_mark_read', 'Alex Rivera', ?, ?, ?)",
+            (f"Marked notification #{id} as read", id, now),
+        )
+        connection.commit()
+    return {"success": True, "id": id}
 
 
 @app.get("/api/search", response_model=list[SearchResult])
@@ -865,9 +1217,13 @@ def crisis_pause() -> SimulatorState:
 def crisis_reset() -> SimulatorState:
     with closing(get_connection()) as connection:
         state = connection.execute("SELECT previous_max_id FROM simulator_state WHERE id=1").fetchone()
-        connection.execute("DELETE FROM mentions WHERE id > ?", (state["previous_max_id"],))
+        if state and state["previous_max_id"] > 0:
+            connection.execute("DELETE FROM mentions WHERE id > ?", (state["previous_max_id"],))
         connection.execute("UPDATE simulator_state SET status='idle', hour=0, inserted=0 WHERE id=1")
         connection.execute("UPDATE risk_state SET incident_open=0, frozen_baseline=0 WHERE id=1")
+        count = connection.execute("SELECT COUNT(*) FROM mentions").fetchone()[0]
+        if count < 24800:
+            seed_mentions(connection)
         connection.commit()
     return crisis_state()
 
