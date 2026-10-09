@@ -80,6 +80,7 @@ test("visual review matrix covers every primary route and theme", async ({ page 
       await page.goto("/");
       const themeButton = page.getByRole("button", { name: theme === "dark" ? "Dark theme" : "Light theme" });
       if (await themeButton.count()) await themeButton.click();
+      await expect(page.getByText("24,900")).toBeVisible({ timeout: 10_000 });
       for (const route of routes) {
         await page.getByRole("button", { name: route, exact: true }).first().click({ force: true });
         await expect(page.getByRole("heading", { name: route, exact: true }).last()).toBeVisible();
