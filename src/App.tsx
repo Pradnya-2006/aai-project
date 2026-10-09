@@ -45,7 +45,7 @@ function App() {
 
   const load = () => {
     setLoading(true); setError("");
-    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 4500));
+    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 15000));
     Promise.race([Promise.all([api.listMentions(), api.getSummary(), api.listTopics(), api.getRisk(), api.listInfluencers(), api.listCampaigns(), api.getExecutive(), api.listCompetitors()]), timeout])
       .then((result) => { const [m, s, t, r, i, c, e, comp] = result as [Mention[], Summary, TopicMetric[], RiskMetric, InfluencerMetric[], CampaignMetric[], ExecutiveMetric[], CompetitorMetric[]]; setMentions(m); setSummary(s); setTopics(t); setRisk(r); setInfluencers(i); setCampaigns(c); setExecutive(e); setCompetitors(comp); setLoading(false); })
       .catch(() => { setLoading(false); setError("Offline demo mode: unable to load the intelligence workspace."); });

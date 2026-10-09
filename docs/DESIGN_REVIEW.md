@@ -40,7 +40,10 @@ The Command Center now answers these six questions from live API state:
 
 - Backend: `12 passed` (one LangGraph serializer deprecation warning).
 - Frontend: `npm.cmd run build` passed; Vite reports the existing large Recharts bundle warning.
-- Playwright: `7 passed` in `tests/command-center.spec.ts`, including API-killed state with Retry, empty state, crisis simulation, command palette, approval compatibility, all primary routes, named-control checks, both themes, and 390px overflow.
+- Playwright: `8 passed` in `tests/command-center.spec.ts`, including API-killed state with Retry, empty state, crisis simulation, command palette, approval compatibility, all primary routes, named-control checks, both themes, 390px overflow, and the visual review matrix.
+- The API load timeout was increased from 4.5s to 15s so the complete analytical batch can finish on slower local SQLite runs before the explicit offline state is shown.
+- The visual review matrix now captures all 10 primary routes at 1440x1000 and 390x844 in dark and light themes (40 screenshots); representative desktop and mobile captures were reviewed for hierarchy, spacing, chart readability, and viewport containment.
+- The mobile review confirms no horizontal overflow. The mobile navigation remains intentionally available as an open drawer state so all route controls can be exercised in the narrow viewport.
 - A direct 390px browser probe identified the pipeline connector as the widest element; adding a positioned connector and contained pipeline overflow reduced document scroll width to exactly the 390px viewport.
 - Theme persistence is initialized before React mounts and the browser suite exercises both dark and light layouts.
 
