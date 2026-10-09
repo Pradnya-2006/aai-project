@@ -38,7 +38,7 @@ export function useWorkspaceData() {
     if (res.isSuccess) {
       toast.success("Connection re-established");
     } else {
-      toast.error("Offline demo mode active");
+      toast.error("Connection retry failed");
     }
   };
 
