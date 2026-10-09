@@ -70,3 +70,24 @@ test("offline retry is visible and reattempts the load", async ({ page }) => {
   await retry.click();
   await expect(page.getByText("Offline demo mode")).toBeVisible();
 });
+
+test("visual review matrix covers every primary route and theme", async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  const routes = ["Command Center", "Live Mentions", "Topics & Trends", "Risk Center", "Competitors", "Influencers", "Campaigns", "Response Studio", "Crisis Ops", "Executive Intelligence"];
+  for (const viewport of [{ name: "desktop", width: 1440, height: 1000 }, { name: "mobile", width: 390, height: 844 }]) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    for (const theme of ["dark", "light"]) {
+      await page.goto("/");
+      const themeButton = page.getByRole("button", { name: theme === "dark" ? "Dark theme" : "Light theme" });
+      if (await themeButton.count()) await themeButton.click();
+      for (const route of routes) {
+        await page.getByRole("button", { name: route, exact: true }).first().click({ force: true });
+        await expect(page.getByRole("heading", { name: route, exact: true }).last()).toBeVisible();
+        await page.screenshot({
+          path: testInfo.outputPath(`visual-review/${viewport.name}-${theme}-${route.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-")}.png`),
+          fullPage: true,
+        });
+      }
+    }
+  }
+});
