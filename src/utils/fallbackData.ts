@@ -1,0 +1,43 @@
+import type { Mention } from "../models/types";
+
+export const fallbackMentions: Mention[] = [
+  {
+    id: 1,
+    author: "Maya Chen",
+    platform: "X",
+    text: "The latest app update keeps logging me out. Please fix this.",
+    tone: "negative",
+    mention_type: "bug report",
+    emotion: "frustrated",
+    intensity: 0.8,
+    impact: 42,
+    topic: "App Update Failure",
+    time: "2m ago",
+  },
+  {
+    id: 2,
+    author: "Jordan Lee",
+    platform: "Reddit",
+    text: "Support got back to me quickly and solved my issue.",
+    tone: "positive",
+    mention_type: "praise",
+    emotion: "happy",
+    intensity: 0.7,
+    impact: 35,
+    topic: "Customer Support",
+    time: "6m ago",
+  },
+  {
+    id: 3,
+    author: "Priya Shah",
+    platform: "Instagram",
+    text: "The new dashboard is clean, but export is confusing.",
+    tone: "neutral",
+    mention_type: "question",
+    emotion: "confused",
+    intensity: 0.4,
+    impact: 20,
+    topic: "New UI",
+    time: "11m ago",
+  },
+];
