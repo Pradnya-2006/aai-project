@@ -1,18 +1,42 @@
 import { CardHead } from "../components/cards/CardHead";
 import { MentionCard } from "../components/cards/MentionCard";
 import { EmptyState } from "../components/feedback/EmptyState";
-import { MentionsFilterPanel } from "../components/ui/FilterBar";
+import {
+  MentionsFilterPanel,
+  type MentionImpactFilter,
+  type MentionRiskFilter,
+} from "../components/ui/FilterBar";
 import { StatusBadge } from "../components/ui/StatusBadge";
 import type { Mention } from "../models/types";
 
 export type LiveMentionsPageProps = {
   mentions: Mention[];
+  allMentions: Mention[];
   onMention: (m: Mention) => void;
+  platform: string;
+  onPlatformChange: (platform: string) => void;
+  platforms: string[];
+  tone: "all" | Mention["tone"];
+  onToneChange: (tone: "all" | Mention["tone"]) => void;
+  risk: MentionRiskFilter;
+  onRiskChange: (risk: MentionRiskFilter) => void;
+  impact: MentionImpactFilter;
+  onImpactChange: (impact: MentionImpactFilter) => void;
 };
 
 export default function LiveMentionsPage({
   mentions,
+  allMentions,
   onMention,
+  platform,
+  onPlatformChange,
+  platforms,
+  tone,
+  onToneChange,
+  risk,
+  onRiskChange,
+  impact,
+  onImpactChange,
 }: LiveMentionsPageProps) {
   return (
     <div className="content">
@@ -29,7 +53,18 @@ export default function LiveMentionsPage({
         </StatusBadge>
       </div>
 
-      <MentionsFilterPanel />
+      <MentionsFilterPanel
+        sourceMentions={allMentions}
+        platform={platform}
+        onPlatformChange={onPlatformChange}
+        platforms={platforms}
+        tone={tone}
+        onToneChange={onToneChange}
+        risk={risk}
+        onRiskChange={onRiskChange}
+        impact={impact}
+        onImpactChange={onImpactChange}
+      />
 
       <div className="card">
         <CardHead

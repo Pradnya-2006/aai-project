@@ -731,7 +731,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http
 
 
 @app.get("/api/mentions", response_model=list[Mention])
-def list_mentions(platform: str | None = None, tone: Tone | None = None, topic: str | None = None, limit: int = Query(100, ge=1, le=100)) -> list[Mention]:
+def list_mentions(platform: str | None = None, tone: Tone | None = None, topic: str | None = None, limit: int = Query(1000, ge=1, le=1000)) -> list[Mention]:
     clauses, params = [], []
     if platform:
         clauses.append("platform = ?")

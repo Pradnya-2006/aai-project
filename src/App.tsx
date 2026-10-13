@@ -12,6 +12,10 @@ import { ErrorState } from "./components/feedback/ErrorState";
 import { LoadingSkeleton } from "./components/feedback/LoadingSkeleton";
 import { Modal } from "./components/feedback/Modal";
 import { FilterBar } from "./components/ui/FilterBar";
+import type {
+  MentionImpactFilter,
+  MentionRiskFilter,
+} from "./components/ui/FilterBar";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useNotifications } from "./hooks/useNotifications";
 import { useSimulator } from "./hooks/useSimulator";
@@ -50,6 +54,19 @@ const queryClient = new QueryClient({
   },
 });
 
+function riskForImpact(impact: number): Exclude<MentionRiskFilter, "all"> {
+  if (impact >= 70) return "critical";
+  if (impact >= 60) return "high";
+  if (impact >= 40) return "medium";
+  return "low";
+}
+
+function impactBucket(impact: number): Exclude<MentionImpactFilter, "all"> {
+  if (impact >= 70) return "high";
+  if (impact >= 40) return "medium";
+  return "low";
+}
+
 export function AppContent() {
   const [active, setActive] = useState("Command Center");
   const [selectedMention, setSelectedMention] = useState<Mention | null>(null);
@@ -63,6 +80,8 @@ export function AppContent() {
   const [query, setQuery] = useState("");
   const [platform, setPlatform] = useState("all");
   const [tone, setTone] = useState<Tone | "all">("all");
+  const [mentionRisk, setMentionRisk] = useState<MentionRiskFilter>("all");
+  const [mentionImpact, setMentionImpact] = useState<MentionImpactFilter>("all");
   const [timeRange, setTimeRange] = useState("24H");
   const [palette, setPalette] = useState(false);
   const [analysis, setAnalysis] = useState<OrchestratorRun | null>(null);
@@ -110,12 +129,14 @@ export function AppContent() {
         (m) =>
           (platform === "all" || m.platform === platform) &&
           (tone === "all" || m.tone === tone) &&
+          (mentionRisk === "all" || riskForImpact(m.impact) === mentionRisk) &&
+          (mentionImpact === "all" || impactBucket(m.impact) === mentionImpact) &&
           (!query ||
             `${m.author} ${m.text} ${m.topic}`
               .toLowerCase()
               .includes(query.toLowerCase())),
       ),
-    [mentions, platform, tone, query],
+    [mentions, platform, tone, mentionRisk, mentionImpact, query],
   );
 
   const chart = useMemo(
@@ -236,7 +257,20 @@ export function AppContent() {
           )}
 
           {active === "Live Mentions" && (
-            <LiveMentionsPage mentions={filtered} onMention={openMention} />
+            <LiveMentionsPage
+              mentions={filtered}
+              allMentions={mentions}
+              onMention={openMention}
+              platform={platform}
+              onPlatformChange={setPlatform}
+              platforms={platforms}
+              tone={tone}
+              onToneChange={setTone}
+              risk={mentionRisk}
+              onRiskChange={setMentionRisk}
+              impact={mentionImpact}
+              onImpactChange={setMentionImpact}
+            />
           )}
           {active === "Topics & Trends" && <TopicsTrendsPage topics={topics} />}
           {active === "Risk Center" && <RiskCenterPage risk={risk} chart={chart} />}

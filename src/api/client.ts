@@ -35,7 +35,16 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  listMentions: () => request<Mention[]>("/api/mentions?limit=100"),
+  listMentions: async () => {
+    const batches = await Promise.all([
+      request<Mention[]>("/api/mentions?limit=1000"),
+      request<Mention[]>("/api/mentions?limit=1000&tone=positive"),
+      request<Mention[]>("/api/mentions?limit=1000&tone=negative"),
+    ]);
+    return Array.from(
+      new Map(batches.flat().map((mention) => [mention.id, mention])).values(),
+    );
+  },
   getSummary: () => request<Summary>("/api/summary"),
   listTopics: () => request<TopicMetric[]>("/api/topics"),
   getRisk: () => request<RiskMetric>("/api/risk"),
