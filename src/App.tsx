@@ -278,7 +278,7 @@ export function AppContent() {
           {active === "Influencers" && <InfluencersPage influencers={influencers} />}
           {active === "Campaigns" && <CampaignsPage campaigns={campaigns} />}
           {active === "Response Studio" && (
-            <ResponseStudioPage onNavigate={navigate} />
+            <ResponseStudioPage onNavigate={navigate} mentions={mentions} riskLevel={risk?.severity} />
           )}
           {active === "Crisis Ops" && (
             <CrisisOpsPage

@@ -7,10 +7,12 @@ import { ApprovalCard } from "../components/cards/ApprovalCard";
 import { CardHead } from "../components/cards/CardHead";
 import { GlobalAuditView } from "../components/cards/GlobalAuditView";
 import { MetricLine } from "../components/ui/MetricLine";
-import type { AuditLogEntry, ResponseDraft } from "../models/types";
+import type { AuditLogEntry, Mention, ReplyTone, ResponseDraft } from "../models/types";
 
 export type ResponseStudioPageProps = {
   onNavigate: (p: string) => void;
+  mentions: Mention[];
+  riskLevel?: string;
 };
 
 const DEFAULT_DRAFT: ResponseDraft = {
@@ -24,6 +26,8 @@ const DEFAULT_DRAFT: ResponseDraft = {
 
 export default function ResponseStudioPage({
   onNavigate,
+  mentions,
+  riskLevel,
 }: ResponseStudioPageProps) {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState("Pending");
@@ -31,6 +35,10 @@ export default function ResponseStudioPage({
   const [simulation, setSimulation] = useState(
     "Simulation ready · mentions will be projected from current data",
   );
+  const [selectedMentionId, setSelectedMentionId] = useState(mentions[0]?.id ?? 0);
+  const [replyTone, setReplyTone] = useState<ReplyTone>("Empathetic");
+  const selectedMention = mentions.find((mention) => mention.id === selectedMentionId) ?? mentions[0];
+  const replyTones: ReplyTone[] = ["Empathetic", "Professional", "Friendly", "Apologetic", "Reassuring", "Concise"];
 
   // Queries
   const { data: responses = [DEFAULT_DRAFT] } = useQuery({
@@ -39,14 +47,25 @@ export default function ResponseStudioPage({
     placeholderData: [DEFAULT_DRAFT],
   });
 
+  const statusForTab: Record<string, ResponseDraft["status"] | undefined> = {
+    Pending: "PENDING_REVIEW",
+    Approved: "APPROVED",
+    Rejected: "REJECTED",
+    Published: "PUBLISHED",
+  };
+  const visibleResponses = useMemo(
+    () => responses.filter((response) => response.status === statusForTab[tab]),
+    [responses, tab],
+  );
   const activeDraft = useMemo(
-    () => responses.find((r) => r.id === selectedId) ?? responses[0] ?? DEFAULT_DRAFT,
-    [responses, selectedId],
+    () => visibleResponses.find((response) => response.id === selectedId) ?? visibleResponses[0] ?? null,
+    [visibleResponses, selectedId],
   );
 
   const { data: responseAudit = [] } = useQuery({
-    queryKey: ["responses", activeDraft.id, "audit"],
-    queryFn: () => api.getResponseAudit(activeDraft.id),
+    queryKey: ["responses", activeDraft?.id, "audit"],
+    queryFn: () => activeDraft ? api.getResponseAudit(activeDraft.id) : Promise.resolve([]),
+    enabled: Boolean(activeDraft),
   });
 
   const { data: globalAudit = [] } = useQuery({
@@ -57,13 +76,13 @@ export default function ResponseStudioPage({
 
   // Mutations with Optimistic Updates & Rollbacks
   const approveMutation = useMutation({
-    mutationFn: () => api.approveResponse(activeDraft.id),
+    mutationFn: () => api.approveResponse(activeDraft!.id),
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: ["responses"] });
       const previousResponses = queryClient.getQueryData<ResponseDraft[]>(["responses"]);
       queryClient.setQueryData<ResponseDraft[]>(["responses"], (old = []) =>
         old.map((d) =>
-          d.id === activeDraft.id ? { ...d, status: "APPROVED" } : d,
+          d.id === activeDraft!.id ? { ...d, status: "APPROVED" } : d,
         ),
       );
       return { previousResponses };
@@ -76,19 +95,19 @@ export default function ResponseStudioPage({
     },
     onSuccess: () => {
       toast.success("Response approved and unlocked for publishing");
-      queryClient.invalidateQueries({ queryKey: ["responses", activeDraft.id, "audit"] });
+      queryClient.invalidateQueries({ queryKey: ["responses", activeDraft!.id, "audit"] });
       queryClient.invalidateQueries({ queryKey: ["audit-log"] });
     },
   });
 
   const rejectMutation = useMutation({
-    mutationFn: (reason: string) => api.rejectResponse(activeDraft.id, reason),
+    mutationFn: (reason: string) => api.rejectResponse(activeDraft!.id, reason),
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: ["responses"] });
       const previousResponses = queryClient.getQueryData<ResponseDraft[]>(["responses"]);
       queryClient.setQueryData<ResponseDraft[]>(["responses"], (old = []) =>
         old.map((d) =>
-          d.id === activeDraft.id ? { ...d, status: "REJECTED" } : d,
+          d.id === activeDraft!.id ? { ...d, status: "REJECTED" } : d,
         ),
       );
       return { previousResponses };
@@ -101,45 +120,58 @@ export default function ResponseStudioPage({
     },
     onSuccess: () => {
       toast.error("Draft marked as rejected");
-      queryClient.invalidateQueries({ queryKey: ["responses", activeDraft.id, "audit"] });
+      queryClient.invalidateQueries({ queryKey: ["responses", activeDraft!.id, "audit"] });
       queryClient.invalidateQueries({ queryKey: ["audit-log"] });
     },
   });
 
   const regenerateMutation = useMutation({
-    mutationFn: () => api.regenerateResponse(activeDraft.id),
+    mutationFn: () => {
+      if (!selectedMention) throw new Error("Select a customer mention before generating a response.");
+      return api.generateResponse({
+        comment: selectedMention.text,
+        sentiment: selectedMention.tone,
+        emotion: selectedMention.emotion,
+        topic: selectedMention.topic,
+        risk: riskLevel,
+        brand_name: "ACME",
+        tone: replyTone,
+        platform: selectedMention.platform,
+        response_id: activeDraft!.id,
+      });
+    },
     onSuccess: (updated) => {
       queryClient.setQueryData<ResponseDraft[]>(["responses"], (old = []) =>
-        old.map((d) => (d.id === activeDraft.id ? updated : d)),
+        old.map((d) => (d.id === activeDraft!.id ? updated.response ?? { ...d, body: updated.generated_reply, status: "PENDING_REVIEW" } : d)),
       );
-      toast.info("New variation generated");
-      queryClient.invalidateQueries({ queryKey: ["responses", activeDraft.id, "audit"] });
+      toast.info(`AI response generated in ${updated.tone.toLowerCase()} tone`);
+      queryClient.invalidateQueries({ queryKey: ["responses", activeDraft!.id, "audit"] });
       queryClient.invalidateQueries({ queryKey: ["audit-log"] });
     },
-    onError: () => toast.error("Failed to regenerate response"),
+    onError: (error: Error) => toast.error(error.message || "AI response generation failed"),
   });
 
   const editMutation = useMutation({
-    mutationFn: (body: string) => api.editResponse(activeDraft.id, body),
+    mutationFn: (body: string) => api.editResponse(activeDraft!.id, body),
     onSuccess: (updated) => {
       queryClient.setQueryData<ResponseDraft[]>(["responses"], (old = []) =>
-        old.map((d) => (d.id === activeDraft.id ? updated : d)),
+        old.map((d) => (d.id === activeDraft!.id ? updated : d)),
       );
       toast.success("Draft saved and new response version created");
-      queryClient.invalidateQueries({ queryKey: ["responses", activeDraft.id, "audit"] });
+      queryClient.invalidateQueries({ queryKey: ["responses", activeDraft!.id, "audit"] });
       queryClient.invalidateQueries({ queryKey: ["audit-log"] });
     },
     onError: () => toast.error("Failed to save edited response"),
   });
 
   const publishMutation = useMutation({
-    mutationFn: () => api.publishResponse(activeDraft.id),
+    mutationFn: () => api.publishResponse(activeDraft!.id),
     onSuccess: (updated) => {
       queryClient.setQueryData<ResponseDraft[]>(["responses"], (old = []) =>
-        old.map((d) => (d.id === activeDraft.id ? updated : d)),
+        old.map((d) => (d.id === activeDraft!.id ? updated : d)),
       );
       toast.success("Response published to channels");
-      queryClient.invalidateQueries({ queryKey: ["responses", activeDraft.id, "audit"] });
+      queryClient.invalidateQueries({ queryKey: ["responses", activeDraft!.id, "audit"] });
       queryClient.invalidateQueries({ queryKey: ["audit-log"] });
       onNavigate("Response Studio");
     },
@@ -172,7 +204,7 @@ export default function ResponseStudioPage({
       .catch(() => toast.error("Simulation failed"));
   };
 
-  const isApproved = activeDraft.status === "APPROVED";
+  const isApproved = activeDraft?.status === "APPROVED";
 
   return (
     <div className="content">
@@ -199,7 +231,7 @@ export default function ResponseStudioPage({
           </button>
           <button
             className="secondary"
-            disabled={bulkApproveMutation.isPending}
+            disabled={bulkApproveMutation.isPending || tab !== "Pending"}
             onClick={() => bulkApproveMutation.mutate()}
           >
             <CheckCheck size={14} />
@@ -224,9 +256,40 @@ export default function ResponseStudioPage({
         <GlobalAuditView audit={globalAudit} />
       ) : (
         <>
-          {responses.length > 1 && (
+          {tab === "Pending" && (
+          <article className="card ai-response-controls">
+            <CardHead title="Generate AI response" help="The backend sends this context to the configured LLM and keeps the result pending review." />
+            <div className="ai-response-grid">
+              <label>
+                Customer mention
+                <select value={selectedMentionId} onChange={(event) => setSelectedMentionId(Number(event.target.value))}>
+                  {mentions.slice(0, 100).map((mention) => (
+                    <option key={mention.id} value={mention.id}>
+                      {mention.topic} · {mention.platform} · {mention.text.slice(0, 80)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Reply tone
+                <select value={replyTone} onChange={(event) => setReplyTone(event.target.value as ReplyTone)}>
+                  {replyTones.map((tone) => <option key={tone} value={tone}>{tone}</option>)}
+                </select>
+              </label>
+            </div>
+            <button
+              className="primary"
+              disabled={regenerateMutation.isPending || !selectedMention}
+              onClick={() => regenerateMutation.mutate()}
+            >
+              {regenerateMutation.isPending ? "Generating AI response..." : "Generate AI Response"}
+            </button>
+          </article>
+          )}
+
+          {visibleResponses.length > 0 && (
             <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
-              {responses.map((r) => (
+              {visibleResponses.map((r) => (
                 <button
                   key={r.id}
                   className={`filter ${selectedId === r.id ? "selected" : ""}`}
@@ -238,14 +301,15 @@ export default function ResponseStudioPage({
             </div>
           )}
 
-          <div className="response-layout">
+          {activeDraft ? <div className="response-layout">
             <ApprovalCard
               draft={activeDraft}
               approved={isApproved}
               onApprove={() => approveMutation.mutate()}
-              onRegenerate={() => regenerateMutation.mutate()}
-              onReject={(reason) => rejectMutation.mutate(reason)}
+              onRegenerate={tab === "Pending" ? () => regenerateMutation.mutate() : undefined}
+              onReject={tab === "Pending" ? (reason) => rejectMutation.mutate(reason) : undefined}
               onSaveEdit={(body) => editMutation.mutate(body)}
+              readOnly={tab !== "Pending"}
               isApproving={approveMutation.isPending}
               isRegenerating={regenerateMutation.isPending}
               isRejecting={rejectMutation.isPending}
@@ -262,7 +326,13 @@ export default function ResponseStudioPage({
                 <MetricLine label="Reviewer" value="Alex Rivera" />
                 <MetricLine
                   label="Publish gate"
-                  value={isApproved ? "Unlocked" : "Locked until APPROVED"}
+                  value={
+                    activeDraft.status === "PUBLISHED"
+                      ? "Published"
+                      : isApproved
+                        ? "Unlocked"
+                        : "Locked until APPROVED"
+                  }
                 />
                 {responseAudit.slice(0, 3).map((entry: AuditLogEntry) => (
                   <MetricLine
@@ -282,7 +352,12 @@ export default function ResponseStudioPage({
                 {publishMutation.isPending ? "Publishing..." : "Publish response"}
               </button>
             </article>
-          </div>
+          </div> : (
+            <article className="card empty-state">
+              <CardHead title={`${tab} responses`} help="Responses are grouped by their current backend status." />
+              <p>No {tab.toLowerCase()} responses yet.</p>
+            </article>
+          )}
         </>
       )}
 

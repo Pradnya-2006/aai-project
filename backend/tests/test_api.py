@@ -1,9 +1,34 @@
 from fastapi.testclient import TestClient
 
+import app.main as main
 from app.main import app, get_connection, simulator_stage
 
 
 client = TestClient(app)
+
+
+def test_ai_generation_keeps_response_pending_and_records_audit(monkeypatch) -> None:
+    monkeypatch.setattr(main, "_generate_with_groq", lambda payload: ("Thanks for sharing this with us.", "test-model"))
+
+    response = client.post(
+        "/api/responses/generate",
+        json={
+            "comment": "I cannot log in after the update",
+            "sentiment": "negative",
+            "emotion": "frustrated",
+            "topic": "Login Issues",
+            "tone": "Empathetic",
+            "platform": "Reddit",
+            "response_id": 1,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["generated_reply"] == "Thanks for sharing this with us."
+    assert payload["status"] == "PENDING_REVIEW"
+    assert payload["response"]["status"] == "PENDING_REVIEW"
+    assert client.get("/api/responses/1/audit").json()[0]["action"] == "response_generate_ai"
 
 
 def test_mentions_and_summary_are_database_backed() -> None:

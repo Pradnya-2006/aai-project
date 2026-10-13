@@ -165,6 +165,22 @@ export type ResponseDraft = {
   versions_count?: number;
 };
 
+export type ReplyTone =
+  | "Empathetic"
+  | "Professional"
+  | "Friendly"
+  | "Apologetic"
+  | "Reassuring"
+  | "Concise";
+
+export type GeneratedResponse = {
+  generated_reply: string;
+  tone: ReplyTone;
+  model: string;
+  status: "PENDING_REVIEW";
+  response?: ResponseDraft;
+};
+
 export type ResponseVersion = {
   id: number;
   response_id: number;

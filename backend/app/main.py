@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import random
 import sqlite3
 import time
@@ -13,6 +14,7 @@ from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+import httpx
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, RetryPolicy, interrupt
@@ -22,6 +24,24 @@ from typing_extensions import TypedDict
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 DATABASE_PATH = BASE_DIR / "backend" / "brand_intelligence.db"
+
+
+def load_backend_env() -> None:
+    env_path = BASE_DIR / ".env"
+    if not env_path.exists():
+        return
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        name = name.strip()
+        value = value.strip().strip("\"'")
+        if name and name not in os.environ:
+            os.environ[name] = value
+
+
+load_backend_env()
 Tone = Literal["positive", "negative", "neutral"]
 MentionType = Literal["complaint", "question", "praise", "feature request", "bug report", "comparison"]
 Emotion = Literal["angry", "frustrated", "confused", "disappointed", "excited", "happy"]
@@ -71,6 +91,29 @@ class RejectRequest(BaseModel):
 
 class EditResponseRequest(BaseModel):
     body: str
+
+
+ReplyTone = Literal["Empathetic", "Professional", "Friendly", "Apologetic", "Reassuring", "Concise"]
+
+
+class GenerateResponseRequest(BaseModel):
+    comment: str
+    sentiment: Tone
+    emotion: Emotion | None = None
+    topic: str = "General"
+    risk: str | None = None
+    brand_name: str = "ACME"
+    tone: ReplyTone
+    platform: str | None = None
+    response_id: int = 1
+
+
+class GeneratedResponse(BaseModel):
+    generated_reply: str
+    tone: ReplyTone
+    model: str
+    status: Literal["PENDING_REVIEW"] = "PENDING_REVIEW"
+    response: ResponseDraft | None = None
 
 
 class BulkApproveRequest(BaseModel):
@@ -823,6 +866,109 @@ def list_responses() -> list[ResponseDraft]:
                 versions_count=max(1, v_count),
             ))
         return result
+
+
+def _generate_with_groq(payload: GenerateResponseRequest) -> tuple[str, str]:
+    api_key = os.getenv("GROQ_API_KEY", "").strip()
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="AI response generation is not configured. Set GROQ_API_KEY in the backend environment.",
+        )
+    model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
+    system_prompt = (
+        "You write public customer-support replies for ACME. Return only the reply text, with no labels "
+        "or quotation marks. Address the customer's actual comment directly and use the requested tone. "
+        "Do not invent refunds, compensation, timelines, fixes, policies, or resolutions. Do not reveal "
+        "internal risk data. Do not request sensitive personal information in a public reply. If details "
+        "are missing, acknowledge the concern safely and suggest moving to an appropriate private support "
+        "channel. Keep the reply concise and natural."
+    )
+    context = "\n".join(
+        [
+            f"Brand: {payload.brand_name}",
+            f"Platform: {payload.platform or 'unknown'}",
+            f"Topic: {payload.topic}",
+            f"Sentiment: {payload.sentiment}",
+            f"Emotion: {payload.emotion or 'unknown'}",
+            f"Risk: {payload.risk or 'unknown'}",
+            f"Requested tone: {payload.tone}",
+            f"Customer comment: {payload.comment.strip()}",
+        ]
+    )
+    try:
+        with httpx.Client(timeout=httpx.Timeout(20.0, connect=5.0)) as client:
+            response = client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={
+                    "model": model,
+                    "temperature": 0.55,
+                    "max_tokens": 320,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": context},
+                    ],
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+    except httpx.TimeoutException as exc:
+        raise HTTPException(status_code=504, detail="AI response generation timed out. Please retry.") from exc
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 429:
+            raise HTTPException(status_code=429, detail="AI provider rate limit reached. Please retry shortly.") from exc
+        if exc.response.status_code == 404:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Configured Groq model '{model}' is unavailable. Update GROQ_MODEL in .env.",
+            ) from exc
+        raise HTTPException(status_code=502, detail="AI provider rejected the generation request.") from exc
+    except (httpx.HTTPError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail="AI provider is unavailable. Please retry.") from exc
+
+    try:
+        generated = data["choices"][0]["message"]["content"].strip()
+    except (KeyError, IndexError, TypeError, AttributeError) as exc:
+        raise HTTPException(status_code=502, detail="AI provider returned an invalid response.") from exc
+    if not generated:
+        raise HTTPException(status_code=502, detail="AI provider returned an empty response.")
+    return generated[:2000], model
+
+
+@app.post("/api/responses/generate", response_model=GeneratedResponse)
+def generate_response(payload: GenerateResponseRequest) -> GeneratedResponse:
+    if not payload.comment.strip():
+        raise HTTPException(status_code=422, detail="Customer comment cannot be empty.")
+    generated, model = _generate_with_groq(payload)
+    now = datetime.now(UTC).isoformat()
+    with closing(get_connection()) as connection:
+        row = connection.execute(
+            "SELECT status FROM response_drafts WHERE id = ?", (payload.response_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Response draft not found.")
+        before = row["status"]
+        connection.execute(
+            "UPDATE response_drafts SET topic = ?, body = ?, status = 'PENDING_REVIEW', updated_at = ? WHERE id = ?",
+            (payload.topic, generated, now, payload.response_id),
+        )
+        connection.execute(
+            "INSERT INTO response_versions (response_id, body, status, created_at) VALUES (?, ?, 'PENDING_REVIEW', ?)",
+            (payload.response_id, generated, now),
+        )
+        connection.execute(
+            "INSERT INTO audit_log (action, before_status, after_status, actor, details, target_id, created_at) "
+            "VALUES ('response_generate_ai', ?, 'PENDING_REVIEW', 'AI Agent (Response Generation)', ?, ?, ?)",
+            (before, f"Generated with {model}; tone={payload.tone}; platform={payload.platform or 'unknown'}", payload.response_id, now),
+        )
+        connection.commit()
+    return GeneratedResponse(
+        generated_reply=generated,
+        tone=payload.tone,
+        model=model,
+        response=get_response(payload.response_id),
+    )
 
 
 @app.get("/api/responses/{id}", response_model=ResponseDraft)

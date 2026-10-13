@@ -14,6 +14,7 @@ export type ApprovalCardProps = {
   isRegenerating?: boolean;
   isRejecting?: boolean;
   isSaving?: boolean;
+  readOnly?: boolean;
 };
 
 export function ApprovalCard({
@@ -27,6 +28,7 @@ export function ApprovalCard({
   isRegenerating = false,
   isRejecting = false,
   isSaving = false,
+  readOnly = false,
 }: ApprovalCardProps) {
   const currentBody =
     draft?.body ??
@@ -72,7 +74,7 @@ export function ApprovalCard({
         }}
       >
         <div className="char-count">
-          {text.length} characters · tone: empathetic
+          {text.length} characters
         </div>
         {hasChanged && onSaveEdit && (
           <button
@@ -128,7 +130,7 @@ export function ApprovalCard({
             </button>
           </div>
         </div>
-      ) : (
+      ) : !readOnly ? (
         <div className="button-row">
           <button
             className="secondary"
@@ -158,6 +160,16 @@ export function ApprovalCard({
                 ? "Approved"
                 : "Approve"}
           </button>
+        </div>
+      ) : (
+        <div className="button-row">
+          <span className="muted">
+            {currentStatus === "PUBLISHED"
+              ? "Published response"
+              : currentStatus === "REJECTED"
+                ? "Rejected response"
+                : "Approved response"}
+          </span>
         </div>
       )}
 

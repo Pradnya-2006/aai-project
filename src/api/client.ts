@@ -10,6 +10,8 @@ import type {
   NotificationItem,
   OrchestratorRun,
   ResponseDraft,
+  GeneratedResponse,
+  ReplyTone,
   ResponseVersion,
   RiskMetric,
   SimulatorState,
@@ -114,6 +116,22 @@ export const api = {
     ),
   resetDemoResponses: () =>
     request<{ reset: number }>("/api/responses/reset-demo", { method: "POST" }),
+  generateResponse: (payload: {
+    comment: string;
+    sentiment: Mention["tone"];
+    emotion?: Mention["emotion"];
+    topic: string;
+    risk?: string;
+    brand_name: string;
+    tone: ReplyTone;
+    platform?: string;
+    response_id: number;
+  }) =>
+    request<GeneratedResponse>("/api/responses/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
   getResponseVersions: (id = 1) =>
     request<ResponseVersion[]>(`/api/responses/${id}/versions`),
   getResponseAudit: (id = 1) =>
