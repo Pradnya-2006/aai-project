@@ -160,7 +160,7 @@ export const api = {
       },
     ),
   drawerOpenIncident: (mention_id?: number, topic?: string) =>
-    request<{ success: boolean; incident_open: boolean; message: string }>(
+    request<{ success: boolean; incident_open: boolean; message: string; incident_id?: string; topic?: string }>(
       "/api/drawer/open-incident",
       {
         method: "POST",

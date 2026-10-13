@@ -1227,7 +1227,13 @@ def drawer_open_incident(payload: DrawerOpenIncidentRequest = DrawerOpenIncident
             (f"Opened incident from mention #{mention_id} ({topic})", mention_id, now),
         )
         connection.commit()
-    return {"success": True, "incident_open": True, "message": "Incident opened"}
+    return {
+        "success": True,
+        "incident_open": True,
+        "incident_id": f"INC-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}",
+        "topic": topic,
+        "message": "Incident opened",
+    }
 
 
 @app.post("/api/drawer/notify-product-team")

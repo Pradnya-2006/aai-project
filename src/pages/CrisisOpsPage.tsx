@@ -23,6 +23,7 @@ export default function CrisisOpsPage({ state, onState }: CrisisOpsPageProps) {
   const [speed, setSpeed] = useState(1);
   const [actionPending, setActionPending] = useState<string | null>(null);
   const [responsePlan, setResponsePlan] = useState<string | null>(null);
+  const [incidentOpened, setIncidentOpened] = useState(false);
   const chart = useMemo(
     () =>
       Array.from({ length: 10 }, (_, index) => ({
@@ -66,6 +67,8 @@ export default function CrisisOpsPage({ state, onState }: CrisisOpsPageProps) {
       .crisisReset()
       .then((s) => {
         onState(s);
+        setIncidentOpened(false);
+        setResponsePlan(null);
         toast.info("Crisis simulation reset");
       })
       .catch(() => toast.error("Could not reset simulation"));
@@ -73,15 +76,19 @@ export default function CrisisOpsPage({ state, onState }: CrisisOpsPageProps) {
 
   const runAction = (action: "incident" | "response" | "notify") => {
     setActionPending(action);
-    const request =
-      action === "incident"
-        ? api.drawerOpenIncident(undefined, "App Update Failure")
-        : action === "response"
-          ? api.drawerGenerateResponse(undefined, "App Update Failure")
-          : api.drawerNotifyProductTeam(undefined, "Product Team");
+    let request: Promise<{ success: boolean; message: string; response_plan?: string }>;
+    if (action === "incident") {
+      request = api.drawerOpenIncident(undefined, "App Update Failure");
+    } else if (action === "response") {
+      request = api.drawerGenerateResponse(undefined, "App Update Failure");
+    } else {
+      request = api.drawerNotifyProductTeam(undefined, "Product Team");
+    }
     request
       .then((result) => {
-        if (action === "response") {
+        if (action === "incident") {
+          setIncidentOpened(true);
+        } else if (action === "response") {
           setResponsePlan(result.response_plan ?? result.message);
         }
         toast.success(result.message);
@@ -183,6 +190,13 @@ export default function CrisisOpsPage({ state, onState }: CrisisOpsPageProps) {
                 <strong>Response plan</strong>
                 <p>{responsePlan}</p>
                 <span className="muted">Draft only · requires human approval in Response Studio</span>
+              </div>
+            )}
+            {incidentOpened && (
+              <div className="action-box crisis-incident-opened">
+                <strong>Incident opened</strong>
+                <p>Product incident tracking is active for App Update Failure.</p>
+                <span className="muted">Baseline frozen · follow-up actions are recorded in the audit log</span>
               </div>
             )}
           </div>
