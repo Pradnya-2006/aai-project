@@ -200,3 +200,33 @@
 {"type":"log","callId":"omwu@836","time":37915.084,"message":"  waiting 500ms"}
 {"type":"screencast-frame","pageId":"page@5019caa5d90b7a23cb0ef7abf86454b6","file":"screencast/page@5019caa5d90b7a23cb0ef7abf86454b6-1791906479344.jpeg","width":1280,"height":720,"timestamp":38100.862,"frameSwapWallTime":1791906479340.012}
 {"type":"screencast-frame","pageId":"page@5019caa5d90b7a23cb0ef7abf86454b6","file":"screencast/page@5019caa5d90b7a23cb0ef7abf86454b6-1791906479560.jpeg","width":1280,"height":720,"timestamp":38317.017,"frameSwapWallTime":1791906479556.669}
+{"type":"log","callId":"omwu@836","time":38418.045,"message":"  waiting for element to be visible, enabled and stable"}
+{"type":"log","callId":"omwu@836","time":38447.144,"message":"  element is not enabled"}
+{"type":"log","callId":"omwu@836","time":38447.169,"message":"retrying click action"}
+{"type":"log","callId":"omwu@836","time":38447.173,"message":"  waiting 500ms"}
+{"type":"screencast-frame","pageId":"page@5019caa5d90b7a23cb0ef7abf86454b6","file":"screencast/page@5019caa5d90b7a23cb0ef7abf86454b6-1791906479784.jpeg","width":1280,"height":720,"timestamp":38540.819,"frameSwapWallTime":1791906479756.6619}
+{"type":"screencast-frame","pageId":"page@5019caa5d90b7a23cb0ef7abf86454b6","file":"screencast/page@5019caa5d90b7a23cb0ef7abf86454b6-1791906480008.jpeg","width":1280,"height":720,"timestamp":38764.958,"frameSwapWallTime":1791906480006.652}
+{"type":"log","callId":"omwu@836","time":38947.382,"message":"  waiting for element to be visible, enabled and stable"}
+{"type":"log","callId":"omwu@836","time":38982.511,"message":"  element is not enabled"}
+{"type":"log","callId":"omwu@836","time":38982.541,"message":"retrying click action"}
+{"type":"log","callId":"omwu@836","time":38982.546,"message":"  waiting 500ms"}
+{"type":"screencast-frame","pageId":"page@5019caa5d90b7a23cb0ef7abf86454b6","file":"screencast/page@5019caa5d90b7a23cb0ef7abf86454b6-1791906480227.jpeg","width":1280,"height":720,"timestamp":38983.91,"frameSwapWallTime":1791906480223.31}
+{"type":"screencast-frame","pageId":"page@5019caa5d90b7a23cb0ef7abf86454b6","file":"screencast/page@5019caa5d90b7a23cb0ef7abf86454b6-1791906480442.jpeg","width":1280,"height":720,"timestamp":39198.84,"frameSwapWallTime":1791906480439.968}
+{"type":"screencast-frame","pageId":"page@5019caa5d90b7a23cb0ef7abf86454b6","file":"screencast/page@5019caa5d90b7a23cb0ef7abf86454b6-1791906480647.jpeg","width":1280,"height":720,"timestamp":39404.196,"frameSwapWallTime":1791906480639.96}
+{"type":"log","callId":"omwu@836","time":39485.562,"message":"  waiting for element to be visible, enabled and stable"}
+{"type":"log","callId":"omwu@836","time":39513.687,"message":"  element is not enabled"}
+{"type":"log","callId":"omwu@836","time":39513.715,"message":"retrying click action"}
+{"type":"log","callId":"omwu@836","time":39513.72,"message":"  waiting 500ms"}
+{"type":"screencast-frame","pageId":"page@5019caa5d90b7a23cb0ef7abf86454b6","file":"screencast/page@5019caa5d90b7a23cb0ef7abf86454b6-1791906480858.jpeg","width":1280,"height":720,"timestamp":39615.364,"frameSwapWallTime":1791906480856.618}
+{"type":"screencast-frame","pageId":"page@5019caa5d90b7a23cb0ef7abf86454b6","file":"screencast/page@5019caa5d90b7a23cb0ef7abf86454b6-1791906481075.jpeg","width":1280,"height":720,"timestamp":39832.009,"frameSwapWallTime":1791906481073.2761}
+{"type":"log","callId":"omwu@836","time":40013.089,"message":"  waiting for element to be visible, enabled and stable"}
+{"type":"log","callId":"omwu@836","time":40029.668,"message":"  element is not enabled"}
+{"type":"log","callId":"omwu@836","time":40029.726,"message":"retrying click action"}
+{"type":"log","callId":"omwu@836","time":40029.733,"message":"  waiting 500ms"}
+{"type":"screencast-frame","pageId":"page@5019caa5d90b7a23cb0ef7abf86454b6","file":"screencast/page@5019caa5d90b7a23cb0ef7abf86454b6-1791906481291.jpeg","width":1280,"height":720,"timestamp":40047.639,"frameSwapWallTime":1791906481289.9338}
+{"type":"screencast-frame","pageId":"page@5019caa5d90b7a23cb0ef7abf86454b6","file":"screencast/page@5019caa5d90b7a23cb0ef7abf86454b6-1791906481509.jpeg","width":1280,"height":720,"timestamp":40265.758,"frameSwapWallTime":1791906481506.592}
+{"type":"log","callId":"omwu@836","time":40538.794,"message":"  waiting for element to be visible, enabled and stable"}
+{"type":"log","callId":"omwu@836","time":40547.789,"message":"  element is not enabled"}
+{"type":"log","callId":"omwu@836","time":40547.814,"message":"retrying click action"}
+{"type":"log","callId":"omwu@836","time":40547.819,"message":"  waiting 500ms"}
+{"type":"screencast-frame","pageId":"page@5019caa5d90b7a23cb0ef7abf86454b6","file":"screencast/page@5019caa5d90b7a23cb0ef7abf86454b6-1791906481899.jpeg","width":1280,"height":720,"timestamp":40656.03,"frameSwapWallTime":1791906481887.378}
