@@ -1197,7 +1197,18 @@ def drawer_generate_response(payload: DrawerGenerateResponseRequest = DrawerGene
             (details, mention_id, now),
         )
         connection.commit()
-    return {"success": True, "message": "Draft response generated", "mention_id": mention_id, "topic": topic}
+    response_plan = (
+        f"1. Acknowledge the {topic} concern without promising an unverified fix. "
+        "2. Route affected customers to the official support channel. "
+        "3. Product team reviews the incident before any public update is approved."
+    )
+    return {
+        "success": True,
+        "message": "Draft response generated",
+        "mention_id": mention_id,
+        "topic": topic,
+        "response_plan": response_plan,
+    }
 
 
 @app.post("/api/drawer/open-incident")

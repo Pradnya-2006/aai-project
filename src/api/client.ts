@@ -151,7 +151,7 @@ export const api = {
 
   // Drawer actions
   drawerGenerateResponse: (mention_id?: number, topic?: string) =>
-    request<{ success: boolean; message: string }>(
+    request<{ success: boolean; message: string; response_plan?: string; topic?: string }>(
       "/api/drawer/generate-response",
       {
         method: "POST",

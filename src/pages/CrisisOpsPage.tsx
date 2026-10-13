@@ -22,6 +22,7 @@ const STAGES = [
 export default function CrisisOpsPage({ state, onState }: CrisisOpsPageProps) {
   const [speed, setSpeed] = useState(1);
   const [actionPending, setActionPending] = useState<string | null>(null);
+  const [responsePlan, setResponsePlan] = useState<string | null>(null);
   const chart = useMemo(
     () =>
       Array.from({ length: 10 }, (_, index) => ({
@@ -79,7 +80,12 @@ export default function CrisisOpsPage({ state, onState }: CrisisOpsPageProps) {
           ? api.drawerGenerateResponse(undefined, "App Update Failure")
           : api.drawerNotifyProductTeam(undefined, "Product Team");
     request
-      .then((result) => toast.success(result.message))
+      .then((result) => {
+        if (action === "response") {
+          setResponsePlan(result.response_plan ?? result.message);
+        }
+        toast.success(result.message);
+      })
       .catch(() => toast.error("Crisis action failed"))
       .finally(() => setActionPending(null));
   };
@@ -172,6 +178,13 @@ export default function CrisisOpsPage({ state, onState }: CrisisOpsPageProps) {
               <button className="secondary" disabled={!!actionPending} onClick={() => runAction("response")}>Generate Response Plan</button>
               <button className="secondary" disabled={!!actionPending} onClick={() => runAction("notify")}>Notify Product Team</button>
             </div>
+            {responsePlan && (
+              <div className="action-box crisis-response-plan">
+                <strong>Response plan</strong>
+                <p>{responsePlan}</p>
+                <span className="muted">Draft only · requires human approval in Response Studio</span>
+              </div>
+            )}
           </div>
         )}
       </div>
