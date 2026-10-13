@@ -19,6 +19,7 @@ import type {
   RiskMetric,
   Summary,
   TopicMetric,
+  AgentMetric,
 } from "../models/types";
 
 export type CommandCenterPageProps = {
@@ -32,6 +33,7 @@ export type CommandCenterPageProps = {
   onMention: (m: Mention) => void;
   onAgent: (name: string) => void;
   onNavigate: (p: string) => void;
+  agents: AgentMetric[];
 };
 
 export default function CommandCenterPage({
@@ -45,6 +47,7 @@ export default function CommandCenterPage({
   onMention,
   onAgent,
   onNavigate,
+  agents,
 }: CommandCenterPageProps) {
   return (
     <div className="content">
@@ -124,7 +127,7 @@ export default function CommandCenterPage({
       </section>
 
       <section className="grid-main">
-        <AgentPipeline analysis={analysis} onAgent={onAgent} />
+        <AgentPipeline analysis={analysis} agents={agents} onAgent={onAgent} />
         <article className="card">
           <CardHead
             title="Trending topics"

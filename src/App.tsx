@@ -78,6 +78,7 @@ export function AppContent() {
     campaigns,
     executive,
     competitors,
+    agents,
     isLoading,
     error,
     refetch,
@@ -229,6 +230,7 @@ export function AppContent() {
               onAnalysis={handleRunAnalysis}
               onMention={openMention}
               onAgent={openAgent}
+              agents={agents}
               onNavigate={navigate}
             />
           )}

@@ -80,6 +80,17 @@ export type CampaignMetric = {
   positive_pct: number;
   engagement: number;
   status: "On track" | "Needs attention" | "At risk";
+  conversions?: number;
+  reach?: number;
+  success_score?: number;
+};
+
+export type AgentMetric = {
+  name: string;
+  status: "ACTIVE" | "IDLE" | "PROCESSING" | "WARNING" | "ERROR";
+  processed_count: number;
+  last_output: string;
+  accuracy?: number | null;
 };
 
 export type ExecutiveMetric = {
@@ -132,6 +143,8 @@ export type ChartPoint = {
   name: string;
   mentions: number;
   negative: number;
+  baseline?: number;
+  forecast?: number;
 };
 
 export type DrawerKind = "mention" | "agent" | "topic" | "influencer" | null;

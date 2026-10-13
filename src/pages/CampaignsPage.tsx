@@ -1,5 +1,6 @@
 import { MetricLine } from "../components/ui/MetricLine";
 import type { CampaignMetric } from "../models/types";
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 export type CampaignsPageProps = {
   campaigns: CampaignMetric[];
@@ -22,16 +23,15 @@ export default function CampaignsPage({ campaigns }: CampaignsPageProps) {
 
       <div className="campaign-grid">
         {tags.map((tag, i) => {
-          const c = campaigns[i % Math.max(campaigns.length, 1)];
+          const c = campaigns[i];
           return (
             <article className="card campaign-card" key={tag}>
               <span className="eyebrow">{tag}</span>
-              <h3>{c?.name ?? "Awaiting data"}</h3>
+              <h3>{tag}</h3>
               <div className="success-score">
                 {c
                   ? Math.round(
-                      c.positive_pct * 0.7 +
-                        Math.min(100, c.engagement / 10) * 0.3,
+                      c.success_score ?? 0,
                     )
                   : 0}
                 <small>success score</small>
@@ -41,10 +41,26 @@ export default function CampaignsPage({ campaigns }: CampaignsPageProps) {
                 value={(c?.mentions ?? 0).toLocaleString()}
               />
               <MetricLine label="Status" value={c?.status ?? "—"} />
+              <MetricLine label="Reach" value={(c?.reach ?? 0).toLocaleString()} />
+              <MetricLine label="Conversions" value={(c?.conversions ?? 0).toLocaleString()} />
             </article>
           );
         })}
       </div>
+      <article className="card chart-card">
+        <h3>Campaign comparison</h3>
+        <ResponsiveContainer width="100%" height={250}>
+          <BarChart data={campaigns}>
+            <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
+            <XAxis dataKey="name" />
+            <YAxis />
+            <Tooltip />
+            <Legend />
+            <Bar dataKey="reach" fill="var(--indigo)" />
+            <Bar dataKey="conversions" fill="var(--green)" />
+          </BarChart>
+        </ResponsiveContainer>
+      </article>
     </div>
   );
 }

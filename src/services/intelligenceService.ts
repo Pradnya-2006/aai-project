@@ -1,6 +1,7 @@
 import { api } from "../api/client";
 import type {
   CampaignMetric,
+  AgentMetric,
   CompetitorMetric,
   CrisisSimulation,
   ExecutiveMetric,
@@ -23,6 +24,7 @@ export type WorkspaceData = {
   campaigns: CampaignMetric[];
   executive: ExecutiveMetric[];
   competitors: CompetitorMetric[];
+  agents: AgentMetric[];
 };
 
 export const intelligenceService = {
@@ -40,7 +42,8 @@ export const intelligenceService = {
       api.listCampaigns(),
       api.getExecutive(),
       api.listCompetitors(),
-    ]).then(([mentions, summary, topics, risk, influencers, campaigns, executive, competitors]) => ({
+      api.listAgents(),
+    ]).then(([mentions, summary, topics, risk, influencers, campaigns, executive, competitors, agents]) => ({
       mentions,
       summary,
       topics,
@@ -49,6 +52,7 @@ export const intelligenceService = {
       campaigns,
       executive,
       competitors,
+      agents,
     }));
 
     return Promise.race([dataPromise, timeout]);

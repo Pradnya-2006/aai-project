@@ -1,9 +1,10 @@
 import { Zap } from "lucide-react";
-import type { OrchestratorRun } from "../../models/types";
+import type { AgentMetric, OrchestratorRun } from "../../models/types";
 import { CardHead } from "./CardHead";
 
 export type AgentPipelineProps = {
   analysis: OrchestratorRun | null;
+  agents: AgentMetric[];
   onAgent: (agentName: string) => void;
 };
 
@@ -18,7 +19,7 @@ const AGENT_STAGES = [
   "Approve",
 ];
 
-export function AgentPipeline({ analysis, onAgent }: AgentPipelineProps) {
+export function AgentPipeline({ analysis, agents, onAgent }: AgentPipelineProps) {
   return (
     <article className="card">
       <CardHead
@@ -32,11 +33,12 @@ export function AgentPipeline({ analysis, onAgent }: AgentPipelineProps) {
         }
       />
       <div className="pipeline">
-        {AGENT_STAGES.map((a, i) => (
+        {(agents.length ? agents.slice(0, 8) : AGENT_STAGES.map((name) => ({ name, status: "IDLE" as const, processed_count: 0, last_output: "" }))).map((agent, i) => (
           <button
             className="pipeline-agent"
-            key={a}
-            onClick={() => onAgent(a)}
+            key={agent.name}
+            title={`${agent.status} · ${agent.processed_count.toLocaleString()} processed`}
+            onClick={() => onAgent(agent.name)}
           >
             <span
               className={`pipeline-node ${
@@ -45,8 +47,9 @@ export function AgentPipeline({ analysis, onAgent }: AgentPipelineProps) {
             >
               {i + 1}
             </span>
-            <small>{a}</small>
-            {i < AGENT_STAGES.length - 1 && <i />}
+            <small>{agent.name}</small>
+            <small>{agent.status} · {agent.processed_count.toLocaleString()}</small>
+            {i < 7 && <i />}
           </button>
         ))}
       </div>

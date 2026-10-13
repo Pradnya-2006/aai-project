@@ -7,7 +7,7 @@ export function computeActivityChart(
   const totalMentions = summary?.mentions ?? mentions.length;
   const negativeSentiment = summary?.negative_sentiment ?? 16;
 
-  return Array.from({ length: 12 }, (_, i) => ({
+  const points: ChartPoint[] = Array.from({ length: 12 }, (_, i) => ({
     name: `${(12 - i) * 2}h`,
     mentions: Math.max(
       1,
@@ -18,4 +18,12 @@ export function computeActivityChart(
       Math.round(negativeSentiment * (0.7 + ((i * 7) % 8) / 10)),
     ),
   })).reverse();
+  const baseline = Math.max(1, Math.round(totalMentions / 12));
+  points.forEach((point, index) => {
+    point.baseline = baseline;
+    if (index >= points.length - 2) {
+      point.forecast = Math.round(point.mentions * (1 + (index - points.length + 2) * 0.15));
+    }
+  });
+  return points;
 }

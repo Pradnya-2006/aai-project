@@ -1,5 +1,6 @@
 import type {
   AuditLogEntry,
+  AgentMetric,
   CampaignMetric,
   CompetitorMetric,
   CrisisSimulation,
@@ -42,6 +43,7 @@ export const api = {
   listCampaigns: () => request<CampaignMetric[]>("/api/campaigns"),
   getExecutive: () => request<ExecutiveMetric[]>("/api/executive"),
   listCompetitors: () => request<CompetitorMetric[]>("/api/competitors"),
+  listAgents: () => request<AgentMetric[]>("/api/agents"),
   runAnalysis: () =>
     request<OrchestratorRun>("/api/analysis/run", { method: "POST" }),
   simulateCrisis: (severity: CrisisSimulation["severity"]) =>

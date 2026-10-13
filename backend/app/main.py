@@ -176,6 +176,9 @@ class CampaignMetric(BaseModel):
     positive_pct: float
     engagement: int
     status: Literal["On track", "Needs attention", "At risk"]
+    conversions: int = 0
+    reach: int = 0
+    success_score: int = 0
 
 
 class ExecutiveMetric(BaseModel):
@@ -1242,11 +1245,15 @@ def list_campaigns() -> list[CampaignMetric]:
             SUM(likes + shares) AS engagement
             FROM mentions GROUP BY topic ORDER BY mentions DESC LIMIT 6"""
         ).fetchall()
+    campaign_names = ["#Launch2026", "#BuildWithAcme", "#DarkMode"]
     campaigns = []
-    for row in rows:
+    for index, row in enumerate(rows[:3]):
         positive_pct = round(row["positive"] / row["mentions"] * 100, 1)
         status = "On track" if positive_pct >= 45 else "Needs attention" if positive_pct >= 25 else "At risk"
-        campaigns.append(CampaignMetric(name=row["name"], mentions=row["mentions"], positive_pct=positive_pct, engagement=row["engagement"], status=status))
+        reach = row["mentions"] * (180 + index * 95)
+        conversions = round(row["mentions"] * (0.04 + positive_pct / 2500))
+        success_score = round(positive_pct * 0.6 + min(100, row["engagement"] / max(1, row["mentions"]) / 2) * 0.2 + min(100, conversions / max(1, row["mentions"]) * 1000) * 0.2)
+        campaigns.append(CampaignMetric(name=campaign_names[index], mentions=row["mentions"], positive_pct=positive_pct, engagement=row["engagement"], status=status, conversions=conversions, reach=reach, success_score=success_score))
     return campaigns
 
 

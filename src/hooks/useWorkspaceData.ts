@@ -50,6 +50,7 @@ export function useWorkspaceData() {
   const campaigns = useMemo(() => data?.campaigns ?? [], [data?.campaigns]);
   const executive = useMemo(() => data?.executive ?? [], [data?.executive]);
   const competitors = useMemo(() => data?.competitors ?? [], [data?.competitors]);
+  const agents = useMemo(() => data?.agents ?? [], [data?.agents]);
 
   return {
     mentions,
@@ -60,6 +61,7 @@ export function useWorkspaceData() {
     campaigns,
     executive,
     competitors,
+    agents,
     isLoading: isLoading && !data,
     isFetching,
     isError,
