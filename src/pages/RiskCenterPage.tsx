@@ -29,10 +29,10 @@ export default function RiskCenterPage({ risk, chart }: RiskCenterPageProps) {
       <div className="risk-grid">
         <article className="card gauge-card">
           <CardHead
-            title="RiskGauge"
+            title="Risk level"
             help="Predicted risk is computed from z-score and growth."
           />
-          <RiskGauge score={score} />
+          <RiskGauge score={score} severity={risk?.severity ?? "Low"} />
           <p className="muted">
             Predicted risk ·{" "}
             {risk?.baseline_frozen
@@ -53,10 +53,10 @@ export default function RiskCenterPage({ risk, chart }: RiskCenterPageProps) {
           <div className="incident-stats">
             <MetricLine
               label="Current / hour"
-              value={`${risk?.negative_pct ?? 0}%`}
+              value={String(risk?.current_per_hour ?? 0)}
             />
-            <MetricLine label="Baseline" value={String(risk?.baseline ?? 0)} />
-            <MetricLine label="Z-score" value={String(risk?.z_score ?? 0)} />
+            <MetricLine label="Baseline" value={String(Math.round(risk?.baseline ?? 0))} />
+            <MetricLine label="Z-score" value={(risk?.z_score ?? 0).toFixed(1)} />
             <MetricLine
               label="Predicted peak"
               value={(risk?.predicted_peak ?? 0).toLocaleString()}

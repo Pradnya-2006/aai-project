@@ -2,17 +2,18 @@ import type { CSSProperties } from "react";
 
 export type RiskGaugeProps = {
   score: number;
+  severity?: string;
 };
 
-export function RiskGauge({ score }: RiskGaugeProps) {
+export function RiskGauge({ score, severity = "LOW" }: RiskGaugeProps) {
   return (
     <div className="gauge">
       <div
         className="gauge-arc"
         style={{ "--score": `${score}%` } as CSSProperties}
       >
-        <strong>{score.toFixed(0)}</strong>
-        <small>/ 100</small>
+        <strong>{severity.toUpperCase()}</strong>
+        <small>{Math.round(score)}/100</small>
       </div>
     </div>
   );

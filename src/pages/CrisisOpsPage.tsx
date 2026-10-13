@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { api } from "../api/client";
 import { MetricLine } from "../components/ui/MetricLine";
@@ -21,6 +21,15 @@ const STAGES = [
 
 export default function CrisisOpsPage({ state, onState }: CrisisOpsPageProps) {
   const [speed, setSpeed] = useState(1);
+  const [actionPending, setActionPending] = useState<string | null>(null);
+  const chart = useMemo(
+    () =>
+      Array.from({ length: 10 }, (_, index) => ({
+        name: `${index + 1}h`,
+        mentions: Math.round(40 + index * index * 5 + (state?.inserted ?? 0) / 5),
+      })),
+    [state?.inserted],
+  );
 
   useEffect(() => {
     if (!state || state.status !== "running") return;
@@ -61,6 +70,33 @@ export default function CrisisOpsPage({ state, onState }: CrisisOpsPageProps) {
       .catch(() => toast.error("Could not reset simulation"));
   };
 
+  const runAction = (action: "incident" | "response" | "notify") => {
+    setActionPending(action);
+    const request =
+      action === "incident"
+        ? api.drawerOpenIncident(undefined, "App Update Failure")
+        : action === "response"
+          ? api.drawerGenerateResponse(undefined, "App Update Failure")
+          : api.drawerNotifyProductTeam(undefined, "Product Team");
+    request
+      .then((result) => toast.success(result.message))
+      .catch(() => toast.error("Crisis action failed"))
+      .finally(() => setActionPending(null));
+  };
+
+  const alert =
+    state?.stage === "ANOMALY"
+      ? "Anomaly detected"
+      : state?.stage === "SPIKE"
+        ? "Spike detected"
+        : state?.stage === "HIGH RISK"
+          ? "High risk: critical predicted in 2h"
+          : state?.stage === "CRITICAL"
+            ? "Crisis detected"
+            : state?.stage === "AI RECOMMENDATION"
+              ? "AI recommends escalating to Product team"
+              : "";
+
   return (
     <div className="content">
       <div className="page-title">
@@ -77,11 +113,12 @@ export default function CrisisOpsPage({ state, onState }: CrisisOpsPageProps) {
       <div className="card crisis-card">
         <div className="story-stepper">
           {STAGES.map((s) => (
-            <span className={state?.stage === s ? "current" : ""} key={s}>
+            <span className={STAGES.indexOf(s) <= STAGES.indexOf(state?.stage ?? "NORMAL") ? "current" : ""} key={s}>
               {s}
             </span>
           ))}
         </div>
+        {alert && <div className="action-box crisis-alert">{alert}</div>}
 
         <div className="crisis-stats">
           <MetricLine label="Status" value={state?.status ?? "idle"} />
@@ -120,6 +157,23 @@ export default function CrisisOpsPage({ state, onState }: CrisisOpsPageProps) {
             Reset
           </button>
         </div>
+        <div className="crisis-live-chart">
+          <div className="card-head"><h3>Live negative mentions</h3><span className="muted">Current: {state?.inserted ?? 0}</span></div>
+          <div className="mini-chart" aria-label="Live negative mentions chart">
+            {chart.map((point) => <i key={point.name} style={{ height: `${Math.min(100, point.mentions / 8)}%` }} title={`${point.name}: ${point.mentions}`} />)}
+          </div>
+        </div>
+        {state?.stage === "AI RECOMMENDATION" && (
+          <div className="card crisis-recommendation">
+            <span className="eyebrow">AI RECOMMENDATION</span>
+            <h3>Escalate the App Update Failure to the Product team.</h3>
+            <div className="button-row">
+              <button className="destructive" disabled={!!actionPending} onClick={() => runAction("incident")}>Open Incident</button>
+              <button className="secondary" disabled={!!actionPending} onClick={() => runAction("response")}>Generate Response Plan</button>
+              <button className="secondary" disabled={!!actionPending} onClick={() => runAction("notify")}>Notify Product Team</button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

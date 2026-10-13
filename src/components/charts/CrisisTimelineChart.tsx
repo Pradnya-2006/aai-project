@@ -23,7 +23,7 @@ export function CrisisTimelineChart({ data }: CrisisTimelineChartProps) {
       <ResponsiveContainer width="100%" height={240}>
         <LineChart data={data}>
           <XAxis dataKey="name" tickLine={false} axisLine={false} />
-          <YAxis hide />
+          <YAxis tickLine={false} axisLine={false} />
           <Tooltip />
           <Line
             dataKey="mentions"

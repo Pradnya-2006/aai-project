@@ -35,7 +35,7 @@ export function ActivityChart({ data }: ActivityChartProps) {
       <ResponsiveContainer width="100%" height={220}>
         <LineChart data={data}>
           <XAxis dataKey="name" tickLine={false} axisLine={false} />
-          <YAxis hide />
+          <YAxis tickLine={false} axisLine={false} />
           <Tooltip
             contentStyle={{
               background: "var(--surface-2)",

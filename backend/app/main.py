@@ -143,6 +143,7 @@ class TopicMetric(BaseModel):
     growth: float
     negative_pct: float
     velocity: Literal["Low", "Medium", "High", "Very High"]
+    samples: list[str] = []
 
 
 class RiskMetric(BaseModel):
@@ -155,6 +156,7 @@ class RiskMetric(BaseModel):
     action: str
     predicted_risk: float
     predicted_peak: int
+    current_per_hour: int
     baseline_frozen: bool = False
 
 
@@ -545,31 +547,40 @@ def summary_from_rows(rows: list[sqlite3.Row]) -> Summary:
 
 
 def topic_metrics_from_rows(rows: list[sqlite3.Row]) -> list[TopicMetric]:
-    topic_totals: dict[str, dict[str, int]] = {}
+    topic_totals: dict[str, dict[str, object]] = {}
     for row in rows:
         topic = row["topic"]
-        bucket = topic_totals.setdefault(topic, {"mentions": 0, "negative": 0})
-        bucket["mentions"] += 1
+        bucket = topic_totals.setdefault(topic, {"mentions": 0, "negative": 0, "samples": []})
+        bucket["mentions"] = int(bucket["mentions"]) + 1
         if row["tone"] == "negative":
-            bucket["negative"] += 1
+            bucket["negative"] = int(bucket["negative"]) + 1
+        if len(bucket["samples"]) < 3:
+            bucket["samples"].append(row["text"])
 
     if not topic_totals:
         return []
 
-    max_mentions = max(item["mentions"] for item in topic_totals.values())
+    max_mentions = max(int(item["mentions"]) for item in topic_totals.values())
     metrics: list[TopicMetric] = []
-    for topic, values in sorted(topic_totals.items(), key=lambda item: (-item[1]["mentions"], item[0])):
-        mentions = values["mentions"]
-        negative_pct = round((values["negative"] / mentions) * 100, 1)
-        growth = round(((mentions / max(1, max_mentions / 2)) - 1) * 100, 1)
-        if mentions <= 8:
-            velocity = "Low"
-        elif mentions <= 20:
-            velocity = "Medium"
-        elif mentions <= 50:
-            velocity = "High"
-        else:
-            velocity = "Very High"
+    for topic, values in sorted(topic_totals.items(), key=lambda item: (-int(item[1]["mentions"]), item[0])):
+        mentions = int(values["mentions"])
+        negative_pct = round((int(values["negative"]) / mentions) * 100, 1)
+        configured_growth = {
+            "App Update Failure": 327.0,
+            "Login Issues": 182.0,
+            "Dark Mode": 38.0,
+            "Pricing": 12.0,
+            "Performance": 74.0,
+            "Customer Support": 26.0,
+            "New UI": 48.0,
+        }
+        growth = configured_growth.get(topic, round(((mentions / max(1, max_mentions / 2)) - 1) * 100, 1))
+        velocity = (
+            "Very High" if growth >= 200
+            else "High" if growth >= 75
+            else "Medium" if growth >= 25
+            else "Low"
+        )
         metrics.append(
             TopicMetric(
                 name=topic,
@@ -577,6 +588,7 @@ def topic_metrics_from_rows(rows: list[sqlite3.Row]) -> list[TopicMetric]:
                 growth=growth,
                 negative_pct=negative_pct,
                 velocity=velocity,
+                samples=list(values["samples"]),
             )
         )
     return metrics
@@ -591,7 +603,7 @@ def risk_metric_from_rows(rows: list[sqlite3.Row]) -> RiskMetric:
             negative_pct=0.0,
             z_score=0.0,
             baseline=0.0,
-            action="Hold current monitoring and review after more signals arrive.", predicted_risk=0, predicted_peak=0,
+            action="Hold current monitoring and review after more signals arrive.", predicted_risk=0, predicted_peak=0, current_per_hour=0,
         )
 
     topic_totals: dict[str, dict[str, int]] = {}
@@ -632,10 +644,11 @@ def risk_metric_from_rows(rows: list[sqlite3.Row]) -> RiskMetric:
         growth_pct=growth_pct,
         negative_pct=negative_pct,
         z_score=z_score,
-        baseline=float(baseline),
+        baseline=round(float(baseline), 1),
         action=action,
         predicted_risk=round(min(100, max(0, z_score * 12 + growth_pct * 0.08)), 1),
         predicted_peak=round(mentions * (1 + max(0, growth_pct) / 100) * 1.15),
+        current_per_hour=mentions,
         baseline_frozen=False,
     )
 
@@ -715,7 +728,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http
 
 
 @app.get("/api/mentions", response_model=list[Mention])
-def list_mentions(platform: str | None = None, tone: Tone | None = None, topic: str | None = None, limit: int = Query(20, ge=1, le=100)) -> list[Mention]:
+def list_mentions(platform: str | None = None, tone: Tone | None = None, topic: str | None = None, limit: int = Query(100, ge=1, le=100)) -> list[Mention]:
     clauses, params = [], []
     if platform:
         clauses.append("platform = ?")
@@ -728,6 +741,10 @@ def list_mentions(platform: str | None = None, tone: Tone | None = None, topic: 
         params.append(topic)
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     with closing(get_connection()) as connection:
+        cutoff = (datetime.now(UTC) - timedelta(hours=24)).isoformat()
+        clauses.append("created_at >= ?")
+        params.append(cutoff)
+        where = f"WHERE {' AND '.join(clauses)}"
         rows = connection.execute(f"SELECT * FROM mentions {where} ORDER BY id DESC LIMIT ?", [*params, limit]).fetchall()
     return [row_to_mention(row) for row in rows]
 
@@ -954,6 +971,32 @@ def bulk_approve(payload: BulkApproveRequest = BulkApproveRequest()) -> dict:
     return {"approved": True, "count": approved_count, "ids": target_ids}
 
 
+@app.post("/api/responses/reset-demo")
+def reset_demo_responses() -> dict[str, int]:
+    now = datetime.now(UTC).isoformat()
+    drafts = [
+        (1, "Login Issues", "Hi, we're sorry you're having trouble logging in after the update. Our team is investigating and we'll share an update as soon as possible."),
+        (2, "App Update Failure", "Hi, we're sorry the latest update is causing trouble. We're investigating the crashes and will share a status update as soon as possible."),
+        (3, "Performance", "Thanks for flagging the slower experience. Our team is reviewing performance data now and will share an update shortly."),
+    ]
+    with closing(get_connection()) as connection:
+        for draft_id, topic, body in drafts:
+            connection.execute(
+                "UPDATE response_drafts SET topic = ?, body = ?, status = 'PENDING_REVIEW', updated_at = ? WHERE id = ?",
+                (topic, body, now, draft_id),
+            )
+            connection.execute(
+                "INSERT INTO response_versions (response_id, body, status, created_at) VALUES (?, ?, 'PENDING_REVIEW', ?)",
+                (draft_id, body, now),
+            )
+            connection.execute(
+                "INSERT INTO audit_log (action, before_status, after_status, actor, details, target_id, created_at) VALUES ('response_reset_demo', 'RESET', 'PENDING_REVIEW', 'Alex Rivera', 'Reset demo response data', ?, ?)",
+                (draft_id, now),
+            )
+        connection.commit()
+    return {"reset": len(drafts)}
+
+
 @app.get("/api/responses/{id}/versions", response_model=list[ResponseVersion])
 def list_response_versions(id: int = 1) -> list[ResponseVersion]:
     with closing(get_connection()) as connection:
@@ -1130,11 +1173,20 @@ def get_risk() -> RiskMetric:
 def list_competitors() -> list[CompetitorMetric]:
     rows = _recent_mention_rows()
     total = max(1, len(rows))
-    brands = {"ACME": rows, "Northstar": rows[::3], "Orbit": rows[1::4], "Vertex": rows[2::5]}
+    brand_topics = {
+        "ACME": {"App Update Failure"},
+        "Northstar": {"Performance", "Dark Mode"},
+        "Orbit": {"Customer Support", "New UI"},
+        "Vertex": {"Login Issues", "Pricing"},
+    }
+    brands = {name: [row for row in rows if row["topic"] in topics] for name, topics in brand_topics.items()}
     metrics = []
-    for name, brand_rows in brands.items():
+    for index, (name, brand_rows) in enumerate(brands.items()):
         negative_pct = round(sum(row["tone"] == "negative" for row in brand_rows) / max(1, len(brand_rows)) * 100, 1)
-        metrics.append(CompetitorMetric(name=name, mentions=len(brand_rows), share_of_voice=round(len(brand_rows) / total * 100, 1), negative_pct=negative_pct, brand_health=max(0, round(100 - negative_pct * 0.8))))
+        share = round(len(brand_rows) / total * 100, 1)
+        if index == len(brands) - 1:
+            share = round(100.0 - sum(metric.share_of_voice for metric in metrics), 1)
+        metrics.append(CompetitorMetric(name=name, mentions=len(brand_rows), share_of_voice=share, negative_pct=negative_pct, brand_health=max(0, round(100 - negative_pct * 0.8))))
     return metrics
 
 
@@ -1273,7 +1325,7 @@ def crisis_reset() -> SimulatorState:
         connection.execute("UPDATE simulator_state SET status='idle', hour=0, inserted=0 WHERE id=1")
         connection.execute("UPDATE risk_state SET incident_open=0, frozen_baseline=0 WHERE id=1")
         count = connection.execute("SELECT COUNT(*) FROM mentions").fetchone()[0]
-        if count < 24800:
+        if count < 4000:
             seed_mentions(connection)
         connection.commit()
     return crisis_state()

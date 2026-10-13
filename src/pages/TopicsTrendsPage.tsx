@@ -10,7 +10,7 @@ export type TopicsTrendsPageProps = {
 };
 
 export default function TopicsTrendsPage({ topics }: TopicsTrendsPageProps) {
-  const [selected, setSelected] = useState<TopicMetric | null>(null);
+  const [selected, setSelected] = useState<TopicMetric | null>(topics[0] ?? null);
 
   return (
     <div className="content">
@@ -56,6 +56,14 @@ export default function TopicsTrendsPage({ topics }: TopicsTrendsPageProps) {
                   value={`${selected.negative_pct}%`}
                 />
                 <MetricLine label="Velocity" value={selected.velocity} />
+                <MetricLine
+                  label="Risk"
+                  value={selected.negative_pct >= 60 ? "CRITICAL" : selected.negative_pct >= 35 ? "HIGH" : selected.negative_pct >= 15 ? "MEDIUM" : "LOW"}
+                />
+              </div>
+              <div className="sample-list">
+                <span className="eyebrow">SAMPLE MENTIONS</span>
+                {(selected.samples ?? []).map((sample) => <p key={sample}>{sample}</p>)}
               </div>
             </>
           ) : (

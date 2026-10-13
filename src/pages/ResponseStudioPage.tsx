@@ -186,6 +186,18 @@ export default function ResponseStudioPage({
         </div>
         <div style={{ display: "flex", gap: "8px" }}>
           <button
+            className="ghost"
+            onClick={() =>
+              api.resetDemoResponses().then(() => {
+                queryClient.invalidateQueries({ queryKey: ["responses"] });
+                queryClient.invalidateQueries({ queryKey: ["audit-log"] });
+                toast.success("Demo response data reset");
+              }).catch(() => toast.error("Could not reset demo data"))
+            }
+          >
+            Reset demo data
+          </button>
+          <button
             className="secondary"
             disabled={bulkApproveMutation.isPending}
             onClick={() => bulkApproveMutation.mutate()}

@@ -1,5 +1,6 @@
 import { MetricLine } from "../components/ui/MetricLine";
 import type { CompetitorMetric } from "../models/types";
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 export type CompetitorsPageProps = {
   competitors: CompetitorMetric[];
@@ -28,6 +29,20 @@ export default function CompetitorsPage({ competitors }: CompetitorsPageProps) {
           </article>
         ))}
       </div>
+      <article className="card chart-card">
+        <h3>Positive vs negative sentiment</h3>
+        <ResponsiveContainer width="100%" height={260}>
+          <BarChart data={competitors.map((c) => ({ name: c.name, positive: Math.max(0, 100 - c.negative_pct), negative: c.negative_pct }))}>
+            <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
+            <XAxis dataKey="name" />
+            <YAxis domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
+            <Tooltip formatter={(value) => `${Math.round(Number(value))}%`} />
+            <Legend />
+            <Bar dataKey="positive" fill="var(--green)" name="Positive" />
+            <Bar dataKey="negative" fill="var(--red)" name="Negative" />
+          </BarChart>
+        </ResponsiveContainer>
+      </article>
     </div>
   );
 }

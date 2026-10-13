@@ -51,7 +51,7 @@ export default function CommandCenterPage({
       <div className="page-title">
         <div>
           <span className="eyebrow">WEDNESDAY · 24 HOUR WINDOW</span>
-          <h2>Good afternoon, Alex.</h2>
+          <h2>Good morning, Marketing team</h2>
           <p className="subhead">
             Your brand is being discussed across the public web.
           </p>
@@ -87,12 +87,12 @@ export default function CommandCenterPage({
         />
         <MetricCard
           label="Current risk"
-          value={risk?.predicted_risk ?? 0}
-          suffix="/100"
+          value={Math.round(risk?.predicted_risk ?? 0)}
           tone="critical"
           icon={<ShieldAlert />}
           spark={[34, 38, 42, 51, 64, risk?.predicted_risk ?? 0]}
-          detail={risk?.cluster}
+          suffix="/100"
+          detail={`Current ${risk?.severity ?? "LOW"} · predicted risk`}
         />
       </div>
 

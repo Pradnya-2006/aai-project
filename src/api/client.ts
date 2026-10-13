@@ -34,7 +34,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  listMentions: () => request<Mention[]>("/api/mentions"),
+  listMentions: () => request<Mention[]>("/api/mentions?limit=100"),
   getSummary: () => request<Summary>("/api/summary"),
   listTopics: () => request<TopicMetric[]>("/api/topics"),
   getRisk: () => request<RiskMetric>("/api/risk"),
@@ -101,6 +101,8 @@ export const api = {
         body: JSON.stringify(ids ? { ids } : {}),
       },
     ),
+  resetDemoResponses: () =>
+    request<{ reset: number }>("/api/responses/reset-demo", { method: "POST" }),
   getResponseVersions: (id = 1) =>
     request<ResponseVersion[]>(`/api/responses/${id}/versions`),
   getResponseAudit: (id = 1) =>

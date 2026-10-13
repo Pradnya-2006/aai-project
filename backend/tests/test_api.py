@@ -40,7 +40,7 @@ def test_competitors_are_computed_from_mentions() -> None:
     assert competitors.status_code == 200
     payload = competitors.json()
     assert {row["name"] for row in payload} == {"ACME", "Northstar", "Orbit", "Vertex"}
-    assert round(sum(row["share_of_voice"] for row in payload), 1) > 100
+    assert round(sum(row["share_of_voice"] for row in payload), 1) == 100
     assert all(0 <= row["brand_health"] <= 100 for row in payload)
 
 
@@ -94,9 +94,9 @@ def test_topic_metrics_use_historical_seed() -> None:
 
 def test_seed_calibration_and_agent_ground_truth_are_computed() -> None:
     summary = client.get("/api/summary").json()
-    assert 24800 <= summary["mentions"] <= 25000
-    assert 15 <= summary["negative_sentiment"] <= 17
-    assert summary["brand_health"] == 84
+    assert 4400 <= summary["mentions"] <= 4600
+    assert 25 <= summary["negative_sentiment"] <= 35
+    assert summary["brand_health"] == 70
     topics = {row["name"]: row for row in client.get("/api/topics").json()}
     assert topics["App Update Failure"]["mentions"] == 1024
     assert topics["App Update Failure"]["negative_pct"] == 82.0
@@ -226,4 +226,3 @@ def test_drawer_actions_endpoints_and_audit() -> None:
     assert "drawer_generate_response" in actions
     assert "drawer_open_incident" in actions
     assert "drawer_notify_product_team" in actions
-

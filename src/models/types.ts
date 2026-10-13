@@ -45,6 +45,7 @@ export type TopicMetric = {
   growth: number;
   negative_pct: number;
   velocity: "Low" | "Medium" | "High" | "Very High";
+  samples?: string[];
 };
 
 export type RiskSeverity = "Low" | "Medium" | "High" | "Critical";
@@ -59,6 +60,7 @@ export type RiskMetric = {
   action: string;
   predicted_risk: number;
   predicted_peak: number;
+  current_per_hour: number;
   baseline_frozen: boolean;
 };
 
@@ -178,4 +180,3 @@ export type NotificationItem = {
   read: boolean;
   created_at: string;
 };
-

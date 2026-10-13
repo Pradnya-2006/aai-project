@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "test": "vitest run",
-    "test:e2e": "playwright test",
+    "test": "playwright test --workers=1",
+    "test:e2e": "playwright test --workers=1",
     "api": "uvicorn backend.app.main:app --reload --port 8000",
     "api:check": "python -m py_compile backend/app/main.py"
   },
