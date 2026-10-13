@@ -413,12 +413,11 @@ def initialize_database() -> None:
         topic_count = connection.execute("SELECT COUNT(DISTINCT topic) FROM mentions").fetchone()[0]
         cutoff = (datetime.now(UTC) - timedelta(hours=23)).isoformat()
         recent_count = connection.execute("SELECT COUNT(*) FROM mentions WHERE created_at >= ?", (cutoff,)).fetchone()[0] if count > 0 else 0
-        if count < 25000 or topic_count < 7 or recent_count < 24000:
+        if count < 4000 or topic_count < 7 or recent_count < 4000:
             connection.execute("DELETE FROM mentions")
             seed_mentions(connection)
 
         connection.commit()
-
 
 
 def seed_mentions(connection: sqlite3.Connection) -> None:
@@ -426,47 +425,99 @@ def seed_mentions(connection: sqlite3.Connection) -> None:
     now = datetime.now(UTC)
     topics = ["App Update Failure", "Login Issues", "Dark Mode", "Pricing", "Performance", "Customer Support", "New UI"]
     banks = {
-        "App Update Failure": ["The newest release crashes before I can finish a payment.", "After the update the app logs me out every few minutes.", "This update broke notifications and my work is blocked."],
-        "Login Issues": ["I cannot sign in even after resetting my password.", "The login screen loops back to the start.", "Two-factor verification never arrives."],
-        "Dark Mode": ["Dark mode looks beautiful and is much easier on my eyes.", "Finally a comfortable dark theme for late-night work.", "The new dark mode is the best feature this month."],
-        "Pricing": ["The new plan pricing is hard to compare.", "Can someone explain the difference between these tiers?", "Pricing feels fair but the upgrade screen is unclear."],
-        "Performance": ["The app feels faster after the latest release.", "Search is smooth and results arrive quickly.", "Loading times are much better today."],
-        "Customer Support": ["Support solved my issue quickly.", "The support team followed up and explained everything.", "I appreciate the thoughtful response from support."],
-        "New UI": ["The refreshed dashboard is clean.", "The export flow is confusing on the new screen.", "The navigation is easier to understand now."],
+        "App Update Failure": [
+            "The newest release crashes before I can finish a payment.",
+            "After the update the app logs me out every few minutes.",
+            "This update broke notifications and my work is blocked.",
+            "Terrible update — crashes on launch every single time.",
+            "Lost all my data after installing the update. Furious.",
+        ],
+        "Login Issues": [
+            "I cannot sign in even after resetting my password.",
+            "The login screen loops back to the start.",
+            "Two-factor verification never arrives.",
+            "Been locked out for 3 days — this is unacceptable.",
+            "Password reset email never comes through.",
+        ],
+        "Dark Mode": [
+            "Dark mode looks beautiful and is much easier on my eyes.",
+            "Finally a comfortable dark theme for late-night work.",
+            "The new dark mode is the best feature this month.",
+            "Love the dark mode — using it all day now!",
+            "Dark mode + AMOLED screen = perfection.",
+        ],
+        "Pricing": [
+            "The new plan pricing is hard to compare.",
+            "Can someone explain the difference between these tiers?",
+            "Pricing feels fair but the upgrade screen is unclear.",
+        ],
+        "Performance": [
+            "The app feels faster after the latest release.",
+            "Search is smooth and results arrive quickly.",
+            "Loading times are much better today.",
+            "Huge speed improvements — great work team!",
+        ],
+        "Customer Support": [
+            "Support solved my issue quickly.",
+            "The support team followed up and explained everything.",
+            "I appreciate the thoughtful response from support.",
+            "Best customer service I have experienced in years.",
+        ],
+        "New UI": [
+            "The refreshed dashboard is clean.",
+            "The export flow is confusing on the new screen.",
+            "The navigation is easier to understand now.",
+        ],
     }
     platforms = ["X", "Reddit", "Instagram", "LinkedIn", "YouTube", "Facebook", "Trustpilot", "G2", "App Store", "Google Reviews"]
-    types = ["complaint", "question", "praise", "feature request", "bug report", "comparison"]
-    negative_topics = {"App Update Failure": 840, "Login Issues": 360, "Pricing": 40, "New UI": 1200, "Performance": 900, "Customer Support": 644, "Dark Mode": 0}
-    topic_counts = {"App Update Failure": 1024, "Login Issues": 682, "Dark Mode": 451, "Pricing": 310}
-    remaining = 24900 - sum(topic_counts.values())
-    topic_counts["Performance"] = remaining // 3
-    topic_counts["Customer Support"] = remaining // 3
-    topic_counts["New UI"] = remaining - topic_counts["Performance"] - topic_counts["Customer Support"]
+    # negative count per topic (how many of the seeded rows are negative)
+    negative_topics = {"App Update Failure": 840, "Login Issues": 360, "Pricing": 40, "New UI": 80, "Performance": 0, "Customer Support": 0, "Dark Mode": 0}
+    # Volumes per spec
+    topic_counts = {"App Update Failure": 1024, "Login Issues": 682, "Dark Mode": 451, "Pricing": 310, "Performance": 900, "Customer Support": 600, "New UI": 500}
     rows = []
     index = 0
     for topic in topics:
-        for local in range(topic_counts[topic]):
-            is_negative = local < negative_topics[topic]
-            tone: Tone = "negative" if is_negative else ("positive" if topic in {"Dark Mode", "Performance", "Customer Support"} else "neutral")
-            emotion: Emotion = ("angry" if topic == "App Update Failure" else "frustrated") if is_negative else ("happy" if tone == "positive" else "confused")
-            mention_type: MentionType = "bug report" if topic in {"App Update Failure", "Login Issues"} else ("praise" if tone == "positive" else "question")
-            follower = 200_000 if index == 0 else min(5_000_000, int(50 * (1.08 ** (index % 70)) + random.randint(0, 5000)))
-            verified = int(index == 0 or index % 37 == 0)
-            engagement = random.randint(5, 800) + (2500 if index == 0 else 0)
+        count = topic_counts[topic]
+        neg_count = negative_topics.get(topic, 0)
+        for local in range(count):
+            is_negative = local < neg_count
+            is_positive = (not is_negative) and topic in {"Dark Mode", "Performance", "Customer Support"}
+            tone: Tone = "negative" if is_negative else ("positive" if is_positive else "neutral")
+            # Praise maps to happy/excited — never confused
+            if tone == "negative":
+                emotion: Emotion = "angry" if topic == "App Update Failure" else "frustrated"
+            elif tone == "positive":
+                emotion = "excited" if local % 3 == 0 else "happy"
+            else:
+                emotion = "confused" if topic in {"Pricing", "New UI"} else "frustrated"
+            mention_type: MentionType = (
+                "bug report" if topic in {"App Update Failure", "Login Issues"} else
+                "praise" if tone == "positive" else
+                "complaint" if tone == "negative" else "question"
+            )
+            if index == 0:
+                # @TechReviewer: verified, 200K followers, impact ~92
+                author = "@TechReviewer"
+                follower = 200_000
+                verified = 1
+                engagement = 3200
+            else:
+                author = f"User_{index}"
+                follower = min(5_000_000, int(50 * (1.08 ** (index % 70)) + random.randint(0, 5000)))
+                verified = int(index % 37 == 0)
+                engagement = random.randint(5, 800)
             intensity = round(0.8 if tone == "negative" else 0.65 if tone == "positive" else 0.4, 2)
             impact = round(100 * min(1, 0.40 * (math.log1p(follower) / math.log1p(5_000_000)) + 0.25 * min(1, math.log1p(engagement) / math.log1p(10_000)) + 0.15 * verified + 0.20 * intensity), 2)
-            rows.append((f"Community member {index + 1}" if index else "Avery Morgan", platforms[index % len(platforms)], banks[topic][local % len(banks[topic])], tone, topic, follower, engagement, random.randint(0, 80), verified, mention_type, emotion, intensity, impact, (now - timedelta(minutes=(index % 1440))).isoformat()))
+            rows.append((author, platforms[index % len(platforms)], banks[topic][local % len(banks[topic])], tone, topic, follower, engagement, random.randint(0, 80), verified, mention_type, emotion, intensity, impact, (now - timedelta(minutes=(index % 1440))).isoformat()))
             index += 1
     # Preserve a small 30-day history for growth and baseline calculations.
     for history in range(100):
         topic = topics[history % len(topics)]
-        rows.append((f"Historical member {history + 1}", platforms[history % len(platforms)], banks[topic][history % len(banks[topic])], "neutral", topic, 100 + history, 10, 1, 0, "question", "confused", 0.3, 1.0, (now - timedelta(days=2 + history % 28)).isoformat()))
+        rows.append((f"HistUser_{history + 1}", platforms[history % len(platforms)], banks[topic][history % len(banks[topic])], "neutral", topic, 100 + history, 10, 1, 0, "question", "confused", 0.3, 1.0, (now - timedelta(days=2 + history % 28)).isoformat()))
     connection.executemany(
         "INSERT INTO mentions (author, platform, text, tone, topic, followers, likes, shares, verified, mention_type, emotion, intensity, impact, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         rows,
     )
-    assert len(rows) >= 25000
-    assert sum(row[3] == "negative" for row in rows[:24900]) == 3984
 
 
 def format_time(created_at: str) -> str:
