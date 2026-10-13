@@ -1,1 +1,0 @@
-{"cluster":"App Update Failure","severity":"Critical","growth_pct":327.0,"negative_pct":82.0,"z_score":5.2,"baseline":239.8,"action":"Escalate response team and prepare a crisis comms protocol.","predicted_risk":88.6,"predicted_peak":5028,"current_per_hour":1024,"baseline_frozen":true}
