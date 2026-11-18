@@ -770,8 +770,7 @@ ORCHESTRATOR = build_orchestrator()
 
 initialize_database()
 app = FastAPI(title="ACME AI Brand Intelligence API", version="0.2.0")
-
-_default_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+_default_origins = ["http://localhost:5173", "http://127.0.0.1:5173", "https://project-nine.vercel.app"]
 _env_origins = os.environ.get("ALLOWED_ORIGINS", "")
 _origins = _default_origins + [o.strip() for o in _env_origins.split(",") if o.strip()]
 app.add_middleware(CORSMiddleware, allow_origins=_origins, allow_methods=["*"], allow_headers=["*"])
