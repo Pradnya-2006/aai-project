@@ -33,7 +33,7 @@ const ICON_MAP: Record<string, ComponentType<{ size?: number; className?: string
   "Live Mentions": Inbox,
   "Topics & Trends": BarChart3,
   "Risk Center": ShieldAlert,
-  Competitors: Globe2,
+  //Competitors: Globe2,
   Influencers: Users,
   Campaigns: Target,
   "Response Studio": FileText,
