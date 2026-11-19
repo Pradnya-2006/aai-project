@@ -18,7 +18,7 @@ export const NAV = [
   "Live Mentions",
   "Topics & Trends",
   "Risk Center",
-  "Competitors",
+  //"Competitors",
   "Influencers",
   "Campaigns",
   "Response Studio",
